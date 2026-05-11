@@ -10,13 +10,17 @@ import {
   getAIDecision,
   getAIRaiseAmount,
   getHandRankKorean,
+  getRandomPersonality,
 } from '../utils/poker';
 
 type GamePhase = 'betting' | 'pre-flop' | 'flop' | 'turn' | 'river' | 'showdown' | 'game-over' | 'setup';
 
 const INITIAL_CHIPS = 1000;
-const SMALL_BLIND = 10;
-const BIG_BLIND = 20;
+const BASE_SMALL_BLIND = 10;
+const BASE_BIG_BLIND = 20;
+const BLIND_INCREASE_INTERVAL = 60; // seconds
+const BLIND_INCREASE_SMALL = 10;
+const BLIND_INCREASE_BIG = 20;
 
 export default function TexasHoldem() {
   const [players, setPlayers] = useState<Player[]>([]);
@@ -27,12 +31,16 @@ export default function TexasHoldem() {
   const [gamePhase, setGamePhase] = useState<GamePhase>('setup');
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
   const [dealerIndex, setDealerIndex] = useState(0);
+  const [bettingRoundStartIndex, setBettingRoundStartIndex] = useState(0);
+  const [actedPlayerIds, setActedPlayerIds] = useState<Set<number>>(new Set());
   const [message, setMessage] = useState('AI 플레이어 수를 선택하세요!');
-  const [raiseAmount, setRaiseAmount] = useState(BIG_BLIND * 2);
+  const [raiseAmount, setRaiseAmount] = useState(BASE_BIG_BLIND * 2);
   const [showCards, setShowCards] = useState(false);
   const [numAIPlayers, setNumAIPlayers] = useState(3);
   const [showRules, setShowRules] = useState(false);
   const [showNewGameConfirm, setShowNewGameConfirm] = useState(false);
+  const [blindLevel, setBlindLevel] = useState(0);
+  const [blindTimeLeft, setBlindTimeLeft] = useState(BLIND_INCREASE_INTERVAL);
 
   // 게임 초기화
   const initGame = (aiCount: number = numAIPlayers) => {
@@ -41,6 +49,7 @@ export default function TexasHoldem() {
     ];
 
     for (let i = 0; i < aiCount; i++) {
+      const personality = getRandomPersonality();
       newPlayers.push({
         id: i + 1,
         name: `AI ${i + 1}`,
@@ -49,6 +58,7 @@ export default function TexasHoldem() {
         currentBet: 0,
         folded: false,
         isAI: true,
+        personality,
       });
     }
 
@@ -59,12 +69,16 @@ export default function TexasHoldem() {
     setGamePhase('betting');
     setMessage('게임을 시작하세요!');
     setShowCards(false);
+    setBlindLevel(0);
+    setBlindTimeLeft(BLIND_INCREASE_INTERVAL);
   };
 
   const startSetup = () => {
     setGamePhase('setup');
     setPlayers([]);
     setMessage('AI 플레이어 수를 선택하세요!');
+    setBlindLevel(0);
+    setBlindTimeLeft(BLIND_INCREASE_INTERVAL);
   };
 
   // 새 라운드 시작
@@ -95,8 +109,8 @@ export default function TexasHoldem() {
       const activeIdx = activePlayers.findIndex(ap => ap.id === p.id);
       let bet = 0;
 
-      if (activeIdx === sbIndex) bet = Math.min(SMALL_BLIND, p.chips);
-      if (activeIdx === bbIndex) bet = Math.min(BIG_BLIND, p.chips);
+      if (activeIdx === sbIndex) bet = Math.min(currentSmallBlind, p.chips);
+      if (activeIdx === bbIndex) bet = Math.min(currentBigBlind, p.chips);
 
       return {
         ...p,
@@ -111,12 +125,15 @@ export default function TexasHoldem() {
     setPlayers(updatedPlayers);
     setCommunityCards([]);
     setPot(activePlayers[sbIndex].currentBet + activePlayers[bbIndex].currentBet);
-    setCurrentBet(BIG_BLIND);
+    setCurrentBet(currentBigBlind);
     setGamePhase('pre-flop');
-    setCurrentPlayerIndex((newDealerIndex + 3) % activePlayers.length);
+    const preflopStartIndex = (newDealerIndex + 3) % activePlayers.length;
+    setCurrentPlayerIndex(preflopStartIndex);
+    setBettingRoundStartIndex(preflopStartIndex);
+    setActedPlayerIds(new Set());
     setDealerIndex(newDealerIndex);
     setMessage('프리플랍: 베팅을 시작하세요.');
-    setRaiseAmount(BIG_BLIND * 2);
+    setRaiseAmount(currentBigBlind * 2);
     setShowCards(false);
   };
 
@@ -129,6 +146,8 @@ export default function TexasHoldem() {
 
     const updatedPlayers = [...players];
     const currentPlayer = updatedPlayers[currentPlayerIndex];
+    let newCurrentBet = currentBet;
+    let raisedThisAction = false;
 
     if (action === 'fold') {
       currentPlayer.folded = true;
@@ -138,39 +157,71 @@ export default function TexasHoldem() {
       currentPlayer.chips -= callAmount;
       currentPlayer.currentBet += callAmount;
       setPot(prev => prev + callAmount);
-      setMessage(`${currentPlayer.name}이(가) ${callAmount} 콜했습니다.`);
+      setMessage(
+        callAmount === 0
+          ? `${currentPlayer.name}이(가) 체크했습니다.`
+          : `${currentPlayer.name}이(가) ${callAmount} 콜했습니다.`
+      );
     } else if (action === 'raise' && amount) {
       const raiseTotal = Math.min(amount, currentPlayer.chips + currentPlayer.currentBet);
       const addAmount = raiseTotal - currentPlayer.currentBet;
       currentPlayer.chips -= addAmount;
       currentPlayer.currentBet = raiseTotal;
       setPot(prev => prev + addAmount);
+      newCurrentBet = raiseTotal;
       setCurrentBet(raiseTotal);
+      raisedThisAction = true;
       setMessage(`${currentPlayer.name}이(가) ${raiseTotal}로 레이즈했습니다.`);
     }
 
+    // 이번 페이즈에서 액션한 플레이어 셋 갱신
+    // 레이즈가 일어나면 다른 플레이어들의 '액션함' 상태를 리셋(다시 한 번 액션해야 함)
+    let nextActed: Set<number>;
+    if (raisedThisAction) {
+      nextActed = new Set<number>([currentPlayer.id]);
+    } else {
+      nextActed = new Set(actedPlayerIds);
+      nextActed.add(currentPlayer.id);
+    }
+    setActedPlayerIds(nextActed);
+
     setPlayers(updatedPlayers);
-    moveToNextPlayer();
+    moveToNextPlayer(updatedPlayers, newCurrentBet, nextActed);
   };
 
-  // 다음 플레이어로 이동
-  const moveToNextPlayer = () => {
-    const activePlayers = players.filter(p => !p.folded && p.chips >= 0);
+  // 다음 플레이어로 이동 — 최신 players/currentBet/acted 셋을 직접 받아서 판정
+  const moveToNextPlayer = (
+    latestPlayers: typeof players,
+    latestBet: number,
+    latestActed: Set<number>
+  ) => {
+    const activePlayers = latestPlayers.filter(p => !p.folded);
     if (activePlayers.length <= 1) {
       endRound();
       return;
     }
 
-    let nextIndex = (currentPlayerIndex + 1) % players.length;
-    while (players[nextIndex].folded || players[nextIndex].chips === 0) {
-      nextIndex = (nextIndex + 1) % players.length;
-    }
+    // 베팅에 참여할 수 있는 플레이어(폴드/올인 제외)
+    const playersStillToAct = activePlayers.filter(p => p.chips > 0);
 
-    // 베팅 라운드 종료 체크
-    const allBetsEqual = activePlayers.every(p => p.currentBet === currentBet || p.chips === 0);
-    if (allBetsEqual && nextIndex === dealerIndex) {
+    const allMatchedBet = activePlayers.every(
+      p => p.currentBet === latestBet || p.chips === 0
+    );
+    const everyoneActed = playersStillToAct.every(p => latestActed.has(p.id));
+
+    if (allMatchedBet && everyoneActed) {
       moveToNextPhase();
       return;
+    }
+
+    let nextIndex = (currentPlayerIndex + 1) % latestPlayers.length;
+    let safety = 0;
+    while (
+      (latestPlayers[nextIndex].folded || latestPlayers[nextIndex].chips === 0) &&
+      safety < latestPlayers.length
+    ) {
+      nextIndex = (nextIndex + 1) % latestPlayers.length;
+      safety++;
     }
 
     setCurrentPlayerIndex(nextIndex);
@@ -205,7 +256,19 @@ export default function TexasHoldem() {
     setDeck(newDeck);
     setCurrentBet(0);
     setPlayers(prev => prev.map(p => ({ ...p, currentBet: 0 })));
-    setCurrentPlayerIndex((dealerIndex + 1) % players.length);
+    // 폴드되지 않은 첫 플레이어부터 시작 (딜러 다음)
+    let nextRoundStartIndex = (dealerIndex + 1) % players.length;
+    let safety = 0;
+    while (
+      (players[nextRoundStartIndex].folded || players[nextRoundStartIndex].chips === 0) &&
+      safety < players.length
+    ) {
+      nextRoundStartIndex = (nextRoundStartIndex + 1) % players.length;
+      safety++;
+    }
+    setCurrentPlayerIndex(nextRoundStartIndex);
+    setBettingRoundStartIndex(nextRoundStartIndex);
+    setActedPlayerIds(new Set());
   };
 
   // 라운드 종료
@@ -268,14 +331,13 @@ export default function TexasHoldem() {
 
     const timer = setTimeout(() => {
       const decision = getAIDecision(currentPlayer, communityCards, currentBet, pot);
-
       if (decision === 'raise') {
-        const amount = getAIRaiseAmount(currentPlayer, currentBet, BIG_BLIND);
+        const amount = getAIRaiseAmount(currentPlayer, currentBet, currentBigBlind);
         playerAction('raise', amount);
       } else {
         playerAction(decision);
       }
-    }, 1000);
+    }, 800);
 
     return () => clearTimeout(timer);
   }, [currentPlayerIndex, gamePhase]);
@@ -284,12 +346,35 @@ export default function TexasHoldem() {
     // Start with setup phase
   }, []);
 
+  useEffect(() => {
+    if (gamePhase === 'setup' || gamePhase === 'game-over') return;
+
+    const timer = setInterval(() => {
+      setBlindTimeLeft(prev => {
+        if (prev <= 1) {
+          setBlindLevel(level => level + 1);
+          return BLIND_INCREASE_INTERVAL;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [gamePhase]);
+
   const humanPlayer = players.find(p => !p.isAI);
   const isHumanTurn = players[currentPlayerIndex] && !players[currentPlayerIndex].isAI && !players[currentPlayerIndex].folded;
   const callAmount = humanPlayer ? currentBet - humanPlayer.currentBet : 0;
+  const currentSmallBlind = BASE_SMALL_BLIND + blindLevel * BLIND_INCREASE_SMALL;
+  const currentBigBlind = BASE_BIG_BLIND + blindLevel * BLIND_INCREASE_BIG;
+  const nextSmallBlind = currentSmallBlind + BLIND_INCREASE_SMALL;
+  const nextBigBlind = currentBigBlind + BLIND_INCREASE_BIG;
+  const blindTimerLabel = `${String(Math.floor(blindTimeLeft / 60)).padStart(2, '0')}:${String(
+    blindTimeLeft % 60
+  ).padStart(2, '0')}`;
   const totalPlayers = players.length;
   const dealerSeatIndex = totalPlayers > 0 ? dealerIndex % totalPlayers : 0;
-  const dealerAngle = totalPlayers > 0 ? (dealerSeatIndex / totalPlayers) * Math.PI * 2 - Math.PI / 2 : 0;
+  const dealerAngle = totalPlayers > 0 ? (dealerSeatIndex / totalPlayers) * Math.PI * 2 + Math.PI / 2 : 0;
   const dealerButtonPosition = {
     left: `${50 + 43 * Math.cos(dealerAngle)}%`,
     top: `${50 + 37 * Math.sin(dealerAngle)}%`,
@@ -729,6 +814,22 @@ export default function TexasHoldem() {
               New Game
             </button>
           </div>
+          <div
+            className="absolute top-11 right-0 rounded-xl px-3 py-2 text-left"
+            style={{
+              background: 'rgba(3, 7, 6, 0.55)',
+              boxShadow: 'inset 0 0 0 1px rgba(245,158,11,0.25)',
+            }}
+          >
+            <div className="text-[9px] tracking-[0.28em] uppercase text-amber-300/70">Blind Timer</div>
+            <div className="text-xs text-amber-100 font-semibold mt-0.5">
+              SB/BB: {currentSmallBlind}/{currentBigBlind}
+            </div>
+            <div className="text-[11px] text-emerald-100/90 mt-0.5">다음 인상: {blindTimerLabel}</div>
+            <div className="text-[10px] text-emerald-100/70">
+              다음 {nextSmallBlind}/{nextBigBlind}
+            </div>
+          </div>
           <div className="flex items-center justify-center gap-4 mb-3">
             <div className="hidden sm:block h-px w-16 bg-gradient-to-r from-transparent to-amber-500/60" />
             <h1
@@ -759,7 +860,7 @@ export default function TexasHoldem() {
           <div className="relative" style={{ paddingBottom: '58%' }}>
             {/* Outer ambient glow */}
             <div
-              className="absolute -inset-6 rounded-[5rem] blur-2xl opacity-60 pointer-events-none"
+              className="absolute -inset-6 rounded-[999px] blur-2xl opacity-60 pointer-events-none"
               style={{
                 background:
                   'radial-gradient(ellipse at center, rgba(245,158,11,0.18) 0%, rgba(245,158,11,0) 70%)',
@@ -768,7 +869,7 @@ export default function TexasHoldem() {
 
             {/* Table Border (Rail) - mahogany wood */}
             <div
-              className="absolute inset-0 rounded-[4.5rem] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)]"
+              className="absolute inset-0 rounded-[999px] shadow-[0_30px_80px_-20px_rgba(0,0,0,0.9)]"
               style={{
                 background:
                   'radial-gradient(ellipse at center, #3a1a0c 0%, #2a1208 60%, #150804 100%)',
@@ -778,7 +879,7 @@ export default function TexasHoldem() {
             >
               {/* Gold inner ring on rail */}
               <div
-                className="absolute inset-3 rounded-[4rem] pointer-events-none"
+                className="absolute inset-3 rounded-[999px] pointer-events-none"
                 style={{
                   boxShadow:
                     'inset 0 0 0 1px rgba(245,158,11,0.35), inset 0 0 30px rgba(0,0,0,0.5)',
@@ -787,7 +888,7 @@ export default function TexasHoldem() {
 
               {/* Table Felt */}
               <div
-                className="absolute inset-8 rounded-[3.5rem]"
+                className="absolute inset-8 rounded-[999px]"
                 style={{
                   background:
                     'radial-gradient(ellipse at center, #1a6b4d 0%, #115239 55%, #0a3a28 100%)',
@@ -885,9 +986,9 @@ export default function TexasHoldem() {
 
                 {/* Players positioned around the table */}
                 {players.map((player, idx) => {
-                  const angle = (idx / totalPlayers) * Math.PI * 2 - Math.PI / 2;
-                  const radiusX = 49;
-                  const radiusY = 46;
+                  const angle = (idx / totalPlayers) * Math.PI * 2 + Math.PI / 2;
+                  const radiusX = 56;
+                  const radiusY = 51;
                   const x = 50 + radiusX * Math.cos(angle);
                   const y = 50 + radiusY * Math.sin(angle);
                   const isActive = idx === currentPlayerIndex && !player.folded;
@@ -949,16 +1050,15 @@ export default function TexasHoldem() {
 
                 {/* Player hole cards: always inside table */}
                 {players.map((player, idx) => {
-                  const angle = (idx / totalPlayers) * Math.PI * 2 - Math.PI / 2;
-                  const radiusX = 49;
-                  const radiusY = 46;
+                  const angle = (idx / totalPlayers) * Math.PI * 2 + Math.PI / 2;
+                  const radiusX = 56;
+                  const radiusY = 51;
                   const x = 50 + radiusX * Math.cos(angle);
                   const y = 50 + radiusY * Math.sin(angle);
-                  const cardOffset = 7.5;
+                  const cardOffset = 14;
                   const cardX = x - cardOffset * Math.cos(angle);
                   const cardY = y - cardOffset * Math.sin(angle);
                   const isRedCard = (suit: string) => suit === '♥' || suit === '♦';
-                  const rotation = angle * (180 / Math.PI) + 90;
 
                   return (
                     <div
@@ -969,10 +1069,7 @@ export default function TexasHoldem() {
                         top: `${cardY}%`,
                       }}
                     >
-                      <div
-                        className="flex gap-1 justify-center"
-                        style={{ transform: `rotate(${rotation}deg)` }}
-                      >
+                      <div className="flex gap-1 justify-center">
                         {player.cards.map((card, cardIdx) => {
                           const showFace = !player.isAI || showCards;
                           return (
@@ -1223,9 +1320,9 @@ export default function TexasHoldem() {
                   </label>
                   <input
                     type="range"
-                    min={currentBet + BIG_BLIND}
+                    min={currentBet + currentBigBlind}
                     max={humanPlayer?.chips || 1000}
-                    step={BIG_BLIND}
+                    step={currentBigBlind}
                     value={raiseAmount}
                     onChange={(e) => setRaiseAmount(Number(e.target.value))}
                     className="holdem-range w-56"
@@ -1235,11 +1332,11 @@ export default function TexasHoldem() {
                           100,
                           Math.max(
                             0,
-                            ((raiseAmount - (currentBet + BIG_BLIND)) /
+                            ((raiseAmount - (currentBet + currentBigBlind)) /
                               Math.max(
                                 1,
                                 (humanPlayer?.chips || 1000) -
-                                  (currentBet + BIG_BLIND)
+                                  (currentBet + currentBigBlind)
                               )) *
                               100
                           )
@@ -1249,14 +1346,14 @@ export default function TexasHoldem() {
                   />
                   <input
                     type="number"
-                    min={currentBet + BIG_BLIND}
+                    min={currentBet + currentBigBlind}
                     max={humanPlayer?.chips || 1000}
-                    step={BIG_BLIND}
+                    step={currentBigBlind}
                     value={raiseAmount}
                     onChange={(e) => {
                       const value = Number(e.target.value);
                       const maxValue = humanPlayer?.chips || 1000;
-                      const minValue = currentBet + BIG_BLIND;
+                      const minValue = currentBet + currentBigBlind;
                       if (value <= maxValue && value >= minValue) {
                         setRaiseAmount(value);
                       }
