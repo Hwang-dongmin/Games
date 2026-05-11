@@ -9,18 +9,70 @@ import {
   evaluateHand,
   getAIDecision,
   getAIRaiseAmount,
-  getHandRankKorean,
+  getHandDescriptionKorean,
   getRandomPersonality,
 } from '../utils/poker';
 
 type GamePhase = 'betting' | 'pre-flop' | 'flop' | 'turn' | 'river' | 'showdown' | 'game-over' | 'setup';
+type RoundHistoryEntry = {
+  round: number;
+  winner: string;
+  hand?: string;
+  pot: number;
+  result: 'win' | 'split';
+  communityCards: Card[];
+  playersSnapshot: Array<{
+    name: string;
+    cards: Card[];
+    folded: boolean;
+  }>;
+};
+type PersistedTexasHoldemState = {
+  players: Player[];
+  deck: Card[];
+  communityCards: Card[];
+  pot: number;
+  currentBet: number;
+  gamePhase: GamePhase;
+  currentPlayerIndex: number;
+  dealerIndex: number;
+  bettingRoundStartIndex: number;
+  actedPlayerIds: number[];
+  message: string;
+  raiseAmount: number;
+  showCards: boolean;
+  numAIPlayers: number;
+  awaitingNextRound: boolean;
+  blindLevel: number;
+  blindTimeLeft: number;
+  roundNumber: number;
+  roundHistory: RoundHistoryEntry[];
+};
 
 const INITIAL_CHIPS = 1000;
 const BASE_SMALL_BLIND = 10;
 const BASE_BIG_BLIND = 20;
-const BLIND_INCREASE_INTERVAL = 60; // seconds
+const BLIND_INCREASE_INTERVAL = 120; // seconds
 const BLIND_INCREASE_SMALL = 10;
 const BLIND_INCREASE_BIG = 20;
+const AI_NAME_POOL = [
+  '모하마드',
+  '이반',
+  '소피아',
+  '루카',
+  '아멜리아',
+  '유수프',
+  '나탈리아',
+  '마르코',
+  '지민',
+  '하루',
+  '카밀라',
+  '올리버',
+  '레오',
+  '미나',
+  '라파엘',
+];
+const HOLDEM_STORAGE_KEY = 'texas-holdem-state-v1';
 
 export default function TexasHoldem() {
   const [players, setPlayers] = useState<Player[]>([]);
@@ -39,20 +91,29 @@ export default function TexasHoldem() {
   const [numAIPlayers, setNumAIPlayers] = useState(3);
   const [showRules, setShowRules] = useState(false);
   const [showNewGameConfirm, setShowNewGameConfirm] = useState(false);
+  const [awaitingNextRound, setAwaitingNextRound] = useState(false);
   const [blindLevel, setBlindLevel] = useState(0);
   const [blindTimeLeft, setBlindTimeLeft] = useState(BLIND_INCREASE_INTERVAL);
+  const [roundNumber, setRoundNumber] = useState(0);
+  const [roundHistory, setRoundHistory] = useState<RoundHistoryEntry[]>([]);
+  const [selectedRound, setSelectedRound] = useState<RoundHistoryEntry | null>(null);
+  const [hasHydrated, setHasHydrated] = useState(false);
 
   // 게임 초기화
   const initGame = (aiCount: number = numAIPlayers) => {
     const newPlayers: Player[] = [
       { id: 0, name: '플레이어', chips: INITIAL_CHIPS, cards: [], currentBet: 0, folded: false, isAI: false },
     ];
+    const shuffledNames = [...AI_NAME_POOL].sort(() => Math.random() - 0.5);
 
     for (let i = 0; i < aiCount; i++) {
       const personality = getRandomPersonality();
+      const baseName = shuffledNames[i % shuffledNames.length] ?? `AI`;
+      const duplicateCycle = Math.floor(i / shuffledNames.length);
+      const aiName = duplicateCycle === 0 ? baseName : `${baseName} ${duplicateCycle + 1}`;
       newPlayers.push({
         id: i + 1,
-        name: `AI ${i + 1}`,
+        name: aiName,
         chips: INITIAL_CHIPS,
         cards: [],
         currentBet: 0,
@@ -69,16 +130,22 @@ export default function TexasHoldem() {
     setGamePhase('betting');
     setMessage('게임을 시작하세요!');
     setShowCards(false);
+    setAwaitingNextRound(false);
     setBlindLevel(0);
     setBlindTimeLeft(BLIND_INCREASE_INTERVAL);
+    setRoundNumber(0);
+    setRoundHistory([]);
   };
 
   const startSetup = () => {
     setGamePhase('setup');
     setPlayers([]);
     setMessage('AI 플레이어 수를 선택하세요!');
+    setAwaitingNextRound(false);
     setBlindLevel(0);
     setBlindTimeLeft(BLIND_INCREASE_INTERVAL);
+    setRoundNumber(0);
+    setRoundHistory([]);
   };
 
   // 새 라운드 시작
@@ -97,6 +164,7 @@ export default function TexasHoldem() {
 
     const newDeck = shuffleDeck(createDeck());
     const activePlayers = players.filter(p => p.chips > 0);
+    setRoundNumber(prev => prev + 1);
 
     // 블라인드 설정
     const newDealerIndex = (dealerIndex + 1) % activePlayers.length;
@@ -275,17 +343,41 @@ export default function TexasHoldem() {
   const endRound = () => {
     setGamePhase('showdown');
     setShowCards(true);
+    setAwaitingNextRound(true);
 
     const activePlayers = players.filter(p => !p.folded);
+    const roundCommunityCards = [...communityCards];
+    const playersSnapshot = players.map(p => ({
+      name: p.name,
+      cards: [...p.cards],
+      folded: p.folded,
+    }));
 
     if (activePlayers.length === 1) {
       // 한 명만 남음
       const winner = activePlayers[0];
+      const winnerCards = [...winner.cards, ...communityCards];
+      const winnerHand =
+        winnerCards.length >= 5
+          ? getHandDescriptionKorean(evaluateHand(winnerCards))
+          : '쇼다운 없이 승리';
       const updatedPlayers = players.map(p =>
         p.id === winner.id ? { ...p, chips: p.chips + pot } : p
       );
       setPlayers(updatedPlayers);
-      setMessage(`${winner.name}이(가) 승리했습니다! ${pot} 칩 획득!`);
+      setRoundHistory(prev => {
+        const entry: RoundHistoryEntry = {
+          round: roundNumber,
+          winner: winner.name,
+          hand: winnerHand,
+          pot,
+          result: 'win',
+          communityCards: roundCommunityCards,
+          playersSnapshot,
+        };
+        return [entry, ...prev].slice(0, 10);
+      });
+      setMessage(`${winner.name}이(가) ${winnerHand}로 승리! ${pot} 칩 획득!`);
     } else {
       // 쇼다운
       const evaluations = activePlayers.map(p => ({
@@ -308,18 +400,39 @@ export default function TexasHoldem() {
       setPlayers(updatedPlayers);
 
       if (winners.length === 1) {
-        const winnerHand = getHandRankKorean(winners[0].hand.rank);
+        const winnerHand = getHandDescriptionKorean(winners[0].hand);
+        setRoundHistory(prev => {
+          const entry: RoundHistoryEntry = {
+            round: roundNumber,
+            winner: winners[0].player.name,
+            hand: winnerHand,
+            pot,
+            result: 'win',
+            communityCards: roundCommunityCards,
+            playersSnapshot,
+          };
+          return [entry, ...prev].slice(0, 10);
+        });
         setMessage(`${winners[0].player.name}이(가) ${winnerHand}로 승리! ${winAmount} 칩 획득!`);
       } else {
         const winnerNames = winners.map(w => w.player.name).join(', ');
+        setRoundHistory(prev => {
+          const entry: RoundHistoryEntry = {
+            round: roundNumber,
+            winner: winnerNames,
+            hand: '무승부',
+            pot,
+            result: 'split',
+            communityCards: roundCommunityCards,
+            playersSnapshot,
+          };
+          return [entry, ...prev].slice(0, 10);
+        });
         setMessage(`무승부! ${winnerNames}가 ${winAmount}칩씩 나눠가집니다.`);
       }
     }
 
     setPot(0);
-    setTimeout(() => {
-      startNewRound();
-    }, 5000);
   };
 
   // AI 턴 처리
@@ -342,9 +455,88 @@ export default function TexasHoldem() {
     return () => clearTimeout(timer);
   }, [currentPlayerIndex, gamePhase]);
 
+  // 새로고침 복원
   useEffect(() => {
-    // Start with setup phase
+    try {
+      const raw = window.localStorage.getItem(HOLDEM_STORAGE_KEY);
+      if (!raw) {
+        setHasHydrated(true);
+        return;
+      }
+      const saved: PersistedTexasHoldemState = JSON.parse(raw);
+      setPlayers(saved.players ?? []);
+      setDeck(saved.deck ?? []);
+      setCommunityCards(saved.communityCards ?? []);
+      setPot(saved.pot ?? 0);
+      setCurrentBet(saved.currentBet ?? 0);
+      setGamePhase(saved.gamePhase ?? 'setup');
+      setCurrentPlayerIndex(saved.currentPlayerIndex ?? 0);
+      setDealerIndex(saved.dealerIndex ?? 0);
+      setBettingRoundStartIndex(saved.bettingRoundStartIndex ?? 0);
+      setActedPlayerIds(new Set(saved.actedPlayerIds ?? []));
+      setMessage(saved.message ?? 'AI 플레이어 수를 선택하세요!');
+      setRaiseAmount(saved.raiseAmount ?? BASE_BIG_BLIND * 2);
+      setShowCards(saved.showCards ?? false);
+      setNumAIPlayers(saved.numAIPlayers ?? 3);
+      setAwaitingNextRound(saved.awaitingNextRound ?? false);
+      setBlindLevel(saved.blindLevel ?? 0);
+      setBlindTimeLeft(saved.blindTimeLeft ?? BLIND_INCREASE_INTERVAL);
+      setRoundNumber(saved.roundNumber ?? 0);
+      setRoundHistory(saved.roundHistory ?? []);
+    } catch {
+      window.localStorage.removeItem(HOLDEM_STORAGE_KEY);
+    } finally {
+      setHasHydrated(true);
+    }
   }, []);
+
+  // 상태 저장
+  useEffect(() => {
+    if (!hasHydrated) return;
+    const toSave: PersistedTexasHoldemState = {
+      players,
+      deck,
+      communityCards,
+      pot,
+      currentBet,
+      gamePhase,
+      currentPlayerIndex,
+      dealerIndex,
+      bettingRoundStartIndex,
+      actedPlayerIds: Array.from(actedPlayerIds),
+      message,
+      raiseAmount,
+      showCards,
+      numAIPlayers,
+      awaitingNextRound,
+      blindLevel,
+      blindTimeLeft,
+      roundNumber,
+      roundHistory,
+    };
+    window.localStorage.setItem(HOLDEM_STORAGE_KEY, JSON.stringify(toSave));
+  }, [
+    hasHydrated,
+    players,
+    deck,
+    communityCards,
+    pot,
+    currentBet,
+    gamePhase,
+    currentPlayerIndex,
+    dealerIndex,
+    bettingRoundStartIndex,
+    actedPlayerIds,
+    message,
+    raiseAmount,
+    showCards,
+    numAIPlayers,
+    awaitingNextRound,
+    blindLevel,
+    blindTimeLeft,
+    roundNumber,
+    roundHistory,
+  ]);
 
   useEffect(() => {
     if (gamePhase === 'setup' || gamePhase === 'game-over') return;
@@ -362,6 +554,21 @@ export default function TexasHoldem() {
     return () => clearInterval(timer);
   }, [gamePhase]);
 
+  // 쇼다운에서 Enter를 누르면 다음 라운드 시작
+  useEffect(() => {
+    if (!awaitingNextRound || gamePhase !== 'showdown') return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      setAwaitingNextRound(false);
+      startNewRound();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [awaitingNextRound, gamePhase, players, dealerIndex, numAIPlayers, blindLevel, blindTimeLeft]);
+
   const humanPlayer = players.find(p => !p.isAI);
   const isHumanTurn = players[currentPlayerIndex] && !players[currentPlayerIndex].isAI && !players[currentPlayerIndex].folded;
   const callAmount = humanPlayer ? currentBet - humanPlayer.currentBet : 0;
@@ -369,6 +576,8 @@ export default function TexasHoldem() {
   const currentBigBlind = BASE_BIG_BLIND + blindLevel * BLIND_INCREASE_BIG;
   const nextSmallBlind = currentSmallBlind + BLIND_INCREASE_SMALL;
   const nextBigBlind = currentBigBlind + BLIND_INCREASE_BIG;
+  const minRaiseTotal = currentBet + currentBigBlind;
+  const maxRaiseTotal = humanPlayer ? humanPlayer.chips + humanPlayer.currentBet : 1000;
   const blindTimerLabel = `${String(Math.floor(blindTimeLeft / 60)).padStart(2, '0')}:${String(
     blindTimeLeft % 60
   ).padStart(2, '0')}`;
@@ -379,6 +588,11 @@ export default function TexasHoldem() {
     left: `${50 + 43 * Math.cos(dealerAngle)}%`,
     top: `${50 + 37 * Math.sin(dealerAngle)}%`,
   };
+
+  useEffect(() => {
+    if (maxRaiseTotal < minRaiseTotal) return;
+    setRaiseAmount(prev => Math.max(minRaiseTotal, Math.min(prev, maxRaiseTotal)));
+  }, [minRaiseTotal, maxRaiseTotal]);
 
   return (
     <div
@@ -448,7 +662,7 @@ export default function TexasHoldem() {
       {showRules && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4">
           <div
-            className="rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+            className="round-scrollbar rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
             style={{
               background:
                 'linear-gradient(180deg, #0f1e1a 0%, #07120f 100%)',
@@ -789,6 +1003,136 @@ export default function TexasHoldem() {
         </div>
       )}
 
+      {/* Round Snapshot Modal */}
+      {selectedRound && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div
+            className="round-scrollbar rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-5"
+            style={{
+              background: 'linear-gradient(180deg, #0f1e1a 0%, #07120f 100%)',
+              boxShadow: '0 0 0 1px rgba(245,158,11,0.3), 0 30px 60px -20px rgba(0,0,0,0.8)',
+            }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-[10px] tracking-[0.35em] uppercase text-amber-300/70">Round Snapshot</p>
+                <h3 className="text-lg font-serif text-amber-100">
+                  R{selectedRound.round} · {selectedRound.result === 'split' ? '무승부' : `승자 ${selectedRound.winner}`}
+                </h3>
+                <p className="text-xs text-emerald-100/75 mt-0.5">
+                  Pot {selectedRound.pot.toLocaleString()} {selectedRound.hand ? `· ${selectedRound.hand}` : ''}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedRound(null)}
+                className="text-slate-300/70 hover:text-amber-200 transition-colors rounded-full p-1.5 hover:bg-white/[0.05]"
+                aria-label="Close round snapshot"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Snapshot Table View */}
+            <div className="relative max-w-2xl mx-auto mb-6">
+              <div className="relative" style={{ paddingBottom: '66%' }}>
+                <div
+                  className="absolute inset-0 rounded-[999px]"
+                  style={{
+                    background:
+                      'radial-gradient(ellipse at center, #3a1a0c 0%, #2a1208 60%, #150804 100%)',
+                    boxShadow:
+                      '0 24px 70px -20px rgba(0,0,0,0.85), inset 0 1px 0 rgba(245,158,11,0.25), inset 0 -2px 8px rgba(0,0,0,0.6)',
+                  }}
+                >
+                  <div
+                    className="absolute inset-6 rounded-[999px]"
+                    style={{
+                      background:
+                        'radial-gradient(ellipse at center, #1a6b4d 0%, #115239 55%, #0a3a28 100%)',
+                      boxShadow:
+                        'inset 0 0 0 1px rgba(245,158,11,0.25), inset 0 0 60px rgba(0,0,0,0.45)',
+                    }}
+                  >
+                    {/* Community cards in center */}
+                    <div className="absolute top-[38%] left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-1.5">
+                      {selectedRound.communityCards.map((card, idx) => {
+                        const isRed = card.suit === '♥' || card.suit === '♦';
+                        return (
+                          <div
+                            key={`${card.rank}-${card.suit}-${idx}`}
+                            className={`w-10 h-14 rounded-md bg-gradient-to-b from-stone-50 to-stone-200 ring-1 ring-black/10 shadow-md flex flex-col items-center justify-center text-xs font-bold ${
+                              isRed ? 'text-rose-600' : 'text-slate-900'
+                            }`}
+                          >
+                            <span>{card.rank}</span>
+                            <span>{card.suit}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Players around table */}
+                    {selectedRound.playersSnapshot.map((p, idx) => {
+                      const total = selectedRound.playersSnapshot.length || 1;
+                      const angle = (idx / total) * Math.PI * 2 + Math.PI / 2;
+                      const x = 50 + 49 * Math.cos(angle);
+                      const y = 50 + 44 * Math.sin(angle);
+                      const cardX = x - 12 * Math.cos(angle);
+                      const cardY = y - 12 * Math.sin(angle);
+
+                      return (
+                        <React.Fragment key={`${p.name}-${idx}`}>
+                          <div
+                            className="absolute -translate-x-1/2 -translate-y-1/2 text-center"
+                            style={{ left: `${x}%`, top: `${y}%` }}
+                          >
+                            <div className="text-[11px] text-slate-100 font-semibold tracking-wide">
+                              {p.name}
+                            </div>
+                            {p.folded && (
+                              <div className="text-[9px] uppercase tracking-[0.22em] text-rose-300/90">Fold</div>
+                            )}
+                          </div>
+                          <div
+                            className="absolute -translate-x-1/2 -translate-y-1/2 flex gap-1"
+                            style={{ left: `${cardX}%`, top: `${cardY}%` }}
+                          >
+                            {p.cards.map((card, cardIdx) => {
+                              const isRed = card.suit === '♥' || card.suit === '♦';
+                              if (p.folded) {
+                                return (
+                                  <div
+                                    key={`${card.rank}-${card.suit}-${cardIdx}`}
+                                    className="w-7 h-10 rounded bg-gradient-to-br from-slate-700 to-slate-900 ring-1 ring-black/30 shadow-sm flex items-center justify-center"
+                                  >
+                                    <span className="text-[10px] text-amber-200/70">♠</span>
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div
+                                  key={`${card.rank}-${card.suit}-${cardIdx}`}
+                                  className={`w-7 h-10 rounded bg-gradient-to-b from-stone-50 to-stone-200 ring-1 ring-black/10 shadow-sm flex flex-col items-center justify-center text-[9px] font-bold ${
+                                    isRed ? 'text-rose-600' : 'text-slate-900'
+                                  }`}
+                                >
+                                  <span>{card.rank}</span>
+                                  <span>{card.suit}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </React.Fragment>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="relative text-center mb-8 pt-2">
@@ -815,7 +1159,7 @@ export default function TexasHoldem() {
             </button>
           </div>
           <div
-            className="absolute top-11 right-0 rounded-xl px-3 py-2 text-left"
+            className="fixed top-20 right-5 z-40 rounded-xl px-3 py-2 text-left"
             style={{
               background: 'rgba(3, 7, 6, 0.55)',
               boxShadow: 'inset 0 0 0 1px rgba(245,158,11,0.25)',
@@ -982,6 +1326,25 @@ export default function TexasHoldem() {
                       </div>
                     )}
                   </div>
+
+                  {awaitingNextRound && gamePhase === 'showdown' && (
+                    <button
+                      onClick={() => {
+                        setAwaitingNextRound(false);
+                        startNewRound();
+                      }}
+                      className="holdem-shimmer rounded-full px-6 py-2 text-[10px] tracking-[0.3em] uppercase font-semibold transition-transform hover:-translate-y-0.5"
+                      style={{
+                        background:
+                          'linear-gradient(180deg, #fde68a 0%, #f59e0b 55%, #b45309 100%)',
+                        color: '#1c1917',
+                        boxShadow:
+                          '0 10px 24px -8px rgba(245,158,11,0.7), inset 0 1px 0 rgba(255,255,255,0.55)',
+                      }}
+                    >
+                      계속하기
+                    </button>
+                  )}
                 </div>
 
                 {/* Players positioned around the table */}
@@ -1008,7 +1371,7 @@ export default function TexasHoldem() {
                         } ${player.folded ? 'opacity-55 grayscale' : ''}`}
                       >
                         {/* Player Info */}
-                        <div className="flex items-center justify-center gap-1.5 mb-1">
+                        <div className="flex items-center justify-center gap-1.5 mb-0.5">
                           <div className="flex items-center gap-1.5 min-w-0">
                             <Users className="w-3 h-3 text-amber-300/80 shrink-0" />
                             <span className="text-slate-100 text-sm font-semibold tracking-wide truncate">
@@ -1016,6 +1379,11 @@ export default function TexasHoldem() {
                             </span>
                           </div>
                         </div>
+                        {player.isAI && player.personality && (
+                          <div className="text-[9px] tracking-[0.18em] uppercase text-amber-200/60 text-center mb-1">
+                            {player.personality.label}
+                          </div>
+                        )}
 
                         {/* Chips */}
                         <div className="flex items-center justify-center mb-0.5 pl-0.5">
@@ -1035,14 +1403,6 @@ export default function TexasHoldem() {
                           </div>
                         </div>
 
-                        {/* Folded Status */}
-                        {player.folded && (
-                          <div className="mt-0.5 flex items-center justify-center pointer-events-none">
-                            <span className="text-[9px] tracking-[0.35em] text-rose-300/90 font-bold uppercase">
-                              Fold
-                            </span>
-                          </div>
-                        )}
                       </div>
                     </div>
                   );
@@ -1059,6 +1419,22 @@ export default function TexasHoldem() {
                   const cardX = x - cardOffset * Math.cos(angle);
                   const cardY = y - cardOffset * Math.sin(angle);
                   const isRedCard = (suit: string) => suit === '♥' || suit === '♦';
+                  const canShowHandHint =
+                    !player.folded &&
+                    player.cards.length >= 2 &&
+                    communityCards.length >= 3 &&
+                    (showCards || gamePhase === 'showdown');
+                  const handHint = canShowHandHint
+                    ? getHandDescriptionKorean(evaluateHand([...player.cards, ...communityCards]))
+                    : '';
+                  const hintPositionClass =
+                    x <= 36
+                      ? 'left-full top-1/2 -translate-y-1/2 ml-1.5'
+                      : x >= 64
+                        ? 'right-full top-1/2 -translate-y-1/2 mr-1.5'
+                        : y <= 40
+                          ? 'left-1/2 top-full -translate-x-1/2 mt-1'
+                          : 'left-1/2 bottom-full -translate-x-1/2 mb-1';
 
                   return (
                     <div
@@ -1069,9 +1445,9 @@ export default function TexasHoldem() {
                         top: `${cardY}%`,
                       }}
                     >
-                      <div className="flex gap-1 justify-center">
+                      <div className="relative flex gap-1 justify-center">
                         {player.cards.map((card, cardIdx) => {
-                          const showFace = !player.isAI || showCards;
+                          const showFace = !player.folded && (!player.isAI || showCards);
                           return (
                             <div
                               key={cardIdx}
@@ -1126,7 +1502,21 @@ export default function TexasHoldem() {
                             </div>
                           );
                         })}
+                        {player.folded && (
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <span className="px-2 py-0.5 rounded-sm border border-rose-200/80 bg-rose-950/55 text-rose-100/95 text-[10px] font-black tracking-[0.32em] uppercase shadow-[0_0_0_1px_rgba(0,0,0,0.25),0_6px_12px_rgba(0,0,0,0.35)]">
+                              Fold
+                            </span>
+                          </div>
+                        )}
                       </div>
+                      {handHint && (
+                        <div className={`absolute pointer-events-none whitespace-nowrap ${hintPositionClass}`}>
+                          <span className="inline-block rounded-full border border-amber-300/45 bg-black/35 px-2.5 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-amber-100/95">
+                            {handHint}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1287,7 +1677,7 @@ export default function TexasHoldem() {
                   </button>
                   <button
                     onClick={() => playerAction('call')}
-                    disabled={!!humanPlayer && humanPlayer.chips < callAmount}
+                    disabled={!humanPlayer || humanPlayer.chips <= 0}
                     className="rounded-full px-7 py-3 text-xs tracking-[0.3em] uppercase font-semibold text-sky-100 transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0"
                     style={{
                       background:
@@ -1296,11 +1686,17 @@ export default function TexasHoldem() {
                         'inset 0 0 0 1px rgba(56,189,248,0.45), 0 8px 20px -10px rgba(56,189,248,0.4)',
                     }}
                   >
-                    {callAmount === 0 ? 'Check' : `Call · ${callAmount}`}
+                    {callAmount === 0
+                      ? 'Check'
+                      : humanPlayer && humanPlayer.chips < callAmount
+                        ? `All-in Call · ${humanPlayer.chips}`
+                        : `Call · ${callAmount}`}
                   </button>
                   <button
-                    onClick={() => playerAction('raise', raiseAmount)}
-                    disabled={!!humanPlayer && humanPlayer.chips < raiseAmount}
+                    onClick={() =>
+                      playerAction('raise', Math.max(minRaiseTotal, Math.min(raiseAmount, maxRaiseTotal)))
+                    }
+                    disabled={!humanPlayer || maxRaiseTotal < minRaiseTotal}
                     className="holdem-shimmer rounded-full px-8 py-3 text-xs tracking-[0.3em] uppercase font-semibold transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:hover:translate-y-0"
                     style={{
                       background:
@@ -1320,9 +1716,9 @@ export default function TexasHoldem() {
                   </label>
                   <input
                     type="range"
-                    min={currentBet + currentBigBlind}
-                    max={humanPlayer?.chips || 1000}
-                    step={currentBigBlind}
+                    min={minRaiseTotal}
+                    max={maxRaiseTotal}
+                    step={1}
                     value={raiseAmount}
                     onChange={(e) => setRaiseAmount(Number(e.target.value))}
                     className="holdem-range w-56"
@@ -1332,11 +1728,10 @@ export default function TexasHoldem() {
                           100,
                           Math.max(
                             0,
-                            ((raiseAmount - (currentBet + currentBigBlind)) /
+                            ((raiseAmount - minRaiseTotal) /
                               Math.max(
                                 1,
-                                (humanPlayer?.chips || 1000) -
-                                  (currentBet + currentBigBlind)
+                                maxRaiseTotal - minRaiseTotal
                               )) *
                               100
                           )
@@ -1346,17 +1741,15 @@ export default function TexasHoldem() {
                   />
                   <input
                     type="number"
-                    min={currentBet + currentBigBlind}
-                    max={humanPlayer?.chips || 1000}
-                    step={currentBigBlind}
+                    min={minRaiseTotal}
+                    max={maxRaiseTotal}
+                    step={1}
                     value={raiseAmount}
                     onChange={(e) => {
                       const value = Number(e.target.value);
-                      const maxValue = humanPlayer?.chips || 1000;
-                      const minValue = currentBet + currentBigBlind;
-                      if (value <= maxValue && value >= minValue) {
-                        setRaiseAmount(value);
-                      }
+                      if (Number.isNaN(value)) return;
+                      const clamped = Math.max(minRaiseTotal, Math.min(value, maxRaiseTotal));
+                      setRaiseAmount(clamped);
                     }}
                     className="w-24 bg-white/[0.04] text-amber-100 px-3 py-1.5 rounded-md border border-amber-400/30 font-mono text-center text-sm focus:outline-none focus:border-amber-300/60 focus:bg-white/[0.06] transition-all"
                   />
@@ -1376,6 +1769,44 @@ export default function TexasHoldem() {
             Home
           </Link>
         </div>
+
+        {/* Round History */}
+        {roundHistory.length > 0 && (
+          <div
+            className="mt-6 mx-auto max-w-3xl rounded-2xl p-4"
+            style={{
+              background: 'rgba(3, 7, 6, 0.45)',
+              boxShadow: 'inset 0 0 0 1px rgba(245,158,11,0.22)',
+            }}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs tracking-[0.3em] uppercase text-amber-300/80">
+                최근 게임 기록 (최대 10판)
+              </h3>
+              <span className="text-[11px] text-emerald-100/70">현재 라운드: {roundNumber}</span>
+            </div>
+            <div className="round-scrollbar space-y-1.5 max-h-64 overflow-y-auto pr-1">
+              {roundHistory.map((entry, idx) => (
+                <button
+                  key={`${entry.round}-${idx}-${entry.winner}`}
+                  type="button"
+                  onClick={() => setSelectedRound(entry)}
+                  className="grid grid-cols-[72px_1fr_120px] items-center gap-2 rounded-lg px-3 py-2 text-sm"
+                  style={{ background: 'rgba(255,255,255,0.03)' }}
+                >
+                  <span className="text-amber-200/80 text-xs tracking-wide">R{entry.round}</span>
+                  <span className="text-slate-100/90 truncate">
+                    {entry.result === 'split' ? `무승부 · ${entry.winner}` : `승자 ${entry.winner}`}
+                    {entry.hand ? ` (${entry.hand})` : ''}
+                  </span>
+                  <span className="text-emerald-200/80 text-right font-mono">
+                    Pot {entry.pot.toLocaleString()}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -475,3 +475,34 @@ export function getHandRankKorean(rank: HandRank): string {
   };
   return korean[rank];
 }
+
+// 핸드 상세 설명 (예: A 원페어)
+export function getHandDescriptionKorean(evaluation: HandEvaluation): string {
+  const base = getHandRankKorean(evaluation.rank);
+  if (evaluation.rank === 'Straight' || evaluation.rank === 'Straight Flush') {
+    const values = evaluation.cards.map(card => rankToValue(card.rank)).sort((a, b) => b - a);
+    const isWheelStraight =
+      values.length === 5 &&
+      values[0] === 14 &&
+      values[1] === 5 &&
+      values[2] === 4 &&
+      values[3] === 3 &&
+      values[4] === 2;
+    const highRank = isWheelStraight ? '5' : evaluation.cards[0]?.rank;
+    if (!highRank) return base;
+    return `${highRank} 하이 ${base}`;
+  }
+
+  if (evaluation.rank !== 'One Pair') return base;
+
+  const rankCounts: Record<Rank, number> = {
+    '2': 0, '3': 0, '4': 0, '5': 0, '6': 0, '7': 0, '8': 0, '9': 0,
+    '10': 0, J: 0, Q: 0, K: 0, A: 0,
+  };
+  evaluation.cards.forEach(card => {
+    rankCounts[card.rank] += 1;
+  });
+  const pairRank = (Object.keys(rankCounts) as Rank[]).find(rank => rankCounts[rank] === 2);
+  if (!pairRank) return base;
+  return `${pairRank} 원페어`;
+}
