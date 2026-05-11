@@ -1,26 +1,8 @@
 import { Link } from 'react-router';
-import { Gamepad2, Grid3x3, Brain, Grid2x2, Zap, Spade } from 'lucide-react';
+import { Gamepad2, Grid2x2, Zap, Spade, Layers } from 'lucide-react';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 
 const games = [
-  {
-    id: 'tic-tac-toe',
-    title: '틱택토',
-    description: '3x3 보드에서 먼저 3개를 연결하세요',
-    icon: Grid3x3,
-    path: '/tic-tac-toe',
-    color: 'from-blue-500 to-cyan-500',
-    image: 'https://images.unsplash.com/photo-1734352749174-32c5f5919a02?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0aWMlMjB0YWMlMjB0b2UlMjBnYW1lfGVufDF8fHx8MTc3MTkzNzU0MXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-  },
-  {
-    id: 'memory-game',
-    title: '메모리 게임',
-    description: '카드를 뒤집어 같은 그림을 찾으세요',
-    icon: Brain,
-    path: '/memory-game',
-    color: 'from-purple-500 to-pink-500',
-    image: 'https://images.unsplash.com/photo-1769577608140-9f91760aef04?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtZW1vcnklMjBjYXJkcyUyMGdhbWV8ZW58MXx8fHwxNzcxOTM3NTQxfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-  },
   {
     id: '2048',
     title: '2048',
@@ -47,6 +29,15 @@ const games = [
     path: '/holdem',
     color: 'from-amber-600 to-amber-800',
     image: 'https://images.unsplash.com/photo-1541278107931-e006523892df?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwb2tlciUyMGNhcmRzfGVufDF8fHx8MTc0NjYzMDAwMHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
+  },
+  {
+    id: 'lexio',
+    title: '렉시오',
+    description: '3명의 AI와 즐기는 한국식 셰딩 게임',
+    icon: Layers,
+    path: '/lexio',
+    color: 'from-purple-600 to-indigo-700',
+    image: 'https://images.unsplash.com/photo-1606503153255-59d8b8b82176?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
   },
 ];
 
