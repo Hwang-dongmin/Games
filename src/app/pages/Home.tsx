@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { Gamepad2, Grid3x3, Brain, Grid2x2, Zap } from 'lucide-react';
+import { Gamepad2, Grid3x3, Brain, Grid2x2, Zap, Spade } from 'lucide-react';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 
 const games = [
@@ -38,6 +38,15 @@ const games = [
     path: '/snake',
     color: 'from-green-500 to-emerald-500',
     image: 'https://images.unsplash.com/photo-1567027757540-7b572280fa22?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxnYW1pbmclMjBjb250cm9sbGVyJTIwbmVvbnxlbnwxfHx8fDE3NzE4ODMxOTl8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
+  },
+  {
+    id: 'holdem',
+    title: '텍사스 홀덤',
+    description: 'AI와 함께하는 포커 게임',
+    icon: Spade,
+    path: '/holdem',
+    color: 'from-amber-600 to-amber-800',
+    image: 'https://images.unsplash.com/photo-1541278107931-e006523892df?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwb2tlciUyMGNhcmRzfGVufDF8fHx8MTc0NjYzMDAwMHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
   },
 ];
 

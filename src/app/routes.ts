@@ -4,6 +4,7 @@ import TicTacToe from "./pages/TicTacToe";
 import MemoryGame from "./pages/MemoryGame";
 import Game2048 from "./pages/Game2048";
 import SnakeGame from "./pages/SnakeGame";
+import TexasHoldem from "./pages/TexasHoldem";
 
 export const router = createBrowserRouter([
   {
@@ -25,5 +26,9 @@ export const router = createBrowserRouter([
   {
     path: "/snake",
     Component: SnakeGame,
+  },
+  {
+    path: "/holdem",
+    Component: TexasHoldem,
   },
 ]);

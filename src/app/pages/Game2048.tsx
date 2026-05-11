@@ -68,6 +68,13 @@ export default function Game2048() {
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
+      // Ctrl+Z or Cmd+Z for undo
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        e.preventDefault();
+        undo();
+        return;
+      }
+
       if (gameOver) return;
 
       switch (e.key) {
@@ -92,7 +99,7 @@ export default function Game2048() {
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [grid, gameOver]);
+  }, [grid, gameOver, history]);
 
   // Touch event handling for mobile
   useEffect(() => {
@@ -735,23 +742,15 @@ export default function Game2048() {
               ))
             )}
           </div>
-          {gameOver && (
-            <div className="mt-4 text-center">
-              <button
-                onClick={initializeGame}
-                className="bg-orange-500 hover:bg-orange-600 text-white px-8 py-3 rounded-lg transition-colors font-bold flex items-center gap-2 mx-auto"
-              >
-                <RotateCcw className="w-5 h-5" />
-                다시 시작하기
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Instructions */}
         <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 mb-4 border border-white/20">
           <p className="text-white text-center text-sm">
             키보드 화살표 키 또는 스와이프로 타일을 이동하세요
+          </p>
+          <p className="text-orange-200 text-center text-xs mt-2">
+            Ctrl+Z (Mac: Cmd+Z)로 되돌리기
           </p>
         </div>
 
