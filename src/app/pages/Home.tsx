@@ -33,7 +33,7 @@ const games = [
   {
     id: 'lexio',
     title: '렉시오',
-    description: '3명의 AI와 즐기는 한국식 셰딩 게임',
+    description: '4명의 AI와 즐기는 5인 한국식 셰딩 게임',
     icon: Layers,
     path: '/lexio',
     color: 'from-purple-600 to-indigo-700',

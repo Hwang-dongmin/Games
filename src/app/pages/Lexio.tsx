@@ -21,9 +21,30 @@ import {
 
 type GamePhase = 'setup' | 'playing' | 'finished';
 type UiPlayer = LexioPlayer;
+type PersistedLexioState = {
+  players: UiPlayer[];
+  currentPlay: LexioCombination | null;
+  trickStarterIdx: number | null;
+  currentPlayerIdx: number;
+  phase: GamePhase;
+  winnerId: number | null;
+  selectedIds: number[];
+  message: string;
+  lastPlayedByIdx: number | null;
+  isFirstTrick: boolean;
+};
 
-const NUM_PLAYERS = 4;
-const HAND_SIZE = 15;
+const NUM_PLAYERS = 5;
+const HAND_SIZE = 12;
+const LEXIO_STORAGE_KEY = 'lexio-state-v1';
+
+/** 2 타일은 금색 베이스라 밝은 색(특히 황)이 묻힘 → 글자·한글 라벨용 진한 톤 */
+const TWO_TILE_INK: Record<LexioTile['color'], string> = {
+  green: '#166534',
+  blue: '#1e3a8a',
+  yellow: '#713f12',
+  red: '#991b1b',
+};
 
 function Tile({
   tile,
@@ -42,6 +63,7 @@ function Tile({
   const sizeCls = small ? 'w-9 h-12 text-base' : 'w-14 h-20 text-2xl';
   const isTwo = tile.number === 2;
   const isOne = tile.number === 1;
+  const inkColor = isTwo ? TWO_TILE_INK[tile.color] : color;
 
   // 2 타일: 골드 베이스 + 색상 보더 + 광채
   // 1 타일: 미세하게 강조된 베이스
@@ -156,8 +178,10 @@ function Tile({
           small ? 'text-[10px]' : 'text-xs'
         } font-bold leading-none z-10`}
         style={{
-          color,
-          textShadow: isTwo ? '0 1px 0 rgba(255,255,255,0.7)' : undefined,
+          color: inkColor,
+          textShadow: isTwo
+            ? '0 0 1px rgba(255,255,255,0.9), 0 1px 2px rgba(0,0,0,0.35)'
+            : undefined,
         }}
       >
         {tile.number}
@@ -169,9 +193,9 @@ function Tile({
           small ? 'text-base' : isTwo ? 'text-3xl' : 'text-2xl'
         }`}
         style={{
-          color,
+          color: inkColor,
           textShadow: isTwo
-            ? '0 1px 0 rgba(255,255,255,0.85), 0 0 6px rgba(255,255,255,0.5)'
+            ? '0 0 1px rgba(255,255,255,0.95), 0 1px 0 rgba(255,255,255,0.35), 0 2px 4px rgba(0,0,0,0.35)'
             : undefined,
           fontFamily: isTwo ? 'Georgia, serif' : undefined,
           fontStyle: isTwo ? 'italic' : undefined,
@@ -186,8 +210,10 @@ function Tile({
           small ? 'text-[10px]' : 'text-xs'
         } font-bold leading-none rotate-180 z-10`}
         style={{
-          color,
-          textShadow: isTwo ? '0 1px 0 rgba(255,255,255,0.7)' : undefined,
+          color: inkColor,
+          textShadow: isTwo
+            ? '0 0 1px rgba(255,255,255,0.9), 0 1px 2px rgba(0,0,0,0.35)'
+            : undefined,
         }}
       >
         {tile.number}
@@ -195,8 +221,15 @@ function Tile({
 
       {/* 좌측 하단 색상 한글 */}
       <span
-        className="absolute bottom-0.5 left-1 text-[8px] tracking-wider font-semibold z-10"
-        style={{ color }}
+        className={`absolute bottom-0.5 left-1 tracking-wider font-semibold z-10 ${
+          isTwo && !small ? 'text-[10px]' : 'text-[8px]'
+        }`}
+        style={{
+          color: inkColor,
+          textShadow: isTwo
+            ? '0 0 1px rgba(255,255,255,0.85), 0 1px 2px rgba(0,0,0,0.3)'
+            : undefined,
+        }}
       >
         {COLOR_KOREAN[tile.color]}
       </span>
@@ -265,6 +298,7 @@ export default function Lexio() {
   const [showNewGameConfirm, setShowNewGameConfirm] = useState(false);
   const [lastPlayedByIdx, setLastPlayedByIdx] = useState<number | null>(null);
   const [isFirstTrick, setIsFirstTrick] = useState(false);
+  const [hasHydrated, setHasHydrated] = useState(false);
 
   const humanPlayer = players.find((p) => !p.isAI);
 
@@ -453,6 +487,62 @@ export default function Lexio() {
     );
   };
 
+  // 새로고침 복원
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(LEXIO_STORAGE_KEY);
+      if (!raw) {
+        setHasHydrated(true);
+        return;
+      }
+      const saved: PersistedLexioState = JSON.parse(raw);
+      setPlayers(saved.players ?? []);
+      setCurrentPlay(saved.currentPlay ?? null);
+      setTrickStarterIdx(saved.trickStarterIdx ?? null);
+      setCurrentPlayerIdx(saved.currentPlayerIdx ?? 0);
+      setPhase(saved.phase ?? 'setup');
+      setWinnerId(saved.winnerId ?? null);
+      setSelectedIds(saved.selectedIds ?? []);
+      setMessage(saved.message ?? '게임을 시작하세요!');
+      setLastPlayedByIdx(saved.lastPlayedByIdx ?? null);
+      setIsFirstTrick(saved.isFirstTrick ?? false);
+    } catch {
+      window.localStorage.removeItem(LEXIO_STORAGE_KEY);
+    } finally {
+      setHasHydrated(true);
+    }
+  }, []);
+
+  // 상태 저장
+  useEffect(() => {
+    if (!hasHydrated) return;
+    const toSave: PersistedLexioState = {
+      players,
+      currentPlay,
+      trickStarterIdx,
+      currentPlayerIdx,
+      phase,
+      winnerId,
+      selectedIds,
+      message,
+      lastPlayedByIdx,
+      isFirstTrick,
+    };
+    window.localStorage.setItem(LEXIO_STORAGE_KEY, JSON.stringify(toSave));
+  }, [
+    hasHydrated,
+    players,
+    currentPlay,
+    trickStarterIdx,
+    currentPlayerIdx,
+    phase,
+    winnerId,
+    selectedIds,
+    message,
+    lastPlayedByIdx,
+    isFirstTrick,
+  ]);
+
   // AI 자동 진행
   useEffect(() => {
     if (phase !== 'playing') return;
@@ -515,11 +605,7 @@ export default function Lexio() {
   }
 
   const aiPlayers = players.filter((p) => p.isAI);
-  // 시각적 배치: AI는 왼쪽, 위, 오른쪽 순으로 배치
-  const aiSlots: Array<UiPlayer | null> = [null, null, null];
-  aiPlayers.forEach((p, i) => {
-    aiSlots[i] = p;
-  });
+  // (5인 게임: 사람 1 + AI 4)
 
   return (
     <div
@@ -589,7 +675,7 @@ export default function Lexio() {
       {showRules && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4">
           <div
-            className="rounded-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+            className="lexio-rules-panel rounded-2xl max-w-3xl w-full max-h-[88vh] overflow-hidden flex flex-col"
             style={{
               background:
                 'linear-gradient(180deg, #1e1b4b 0%, #0a0a23 100%)',
@@ -598,7 +684,7 @@ export default function Lexio() {
             }}
           >
             <div
-              className="sticky top-0 p-6 flex items-center justify-between backdrop-blur-md z-10"
+              className="p-6 flex items-center justify-between backdrop-blur-md shrink-0"
               style={{
                 background:
                   'linear-gradient(180deg, rgba(30,27,75,0.95) 0%, rgba(30,27,75,0.85) 100%)',
@@ -623,20 +709,20 @@ export default function Lexio() {
               </button>
             </div>
 
-            <div className="p-6 space-y-7 text-slate-100">
-              <section>
+            <div className="lexio-rules-scroll p-6 space-y-4 text-slate-100 overflow-y-auto">
+              <section className="lexio-rule-section">
                 <h3 className="text-xs tracking-[0.3em] uppercase text-purple-300/80 mb-3">
                   게임 개요
                 </h3>
                 <p className="text-purple-100/85 leading-relaxed text-sm">
-                  렉시오는 4명이 즐기는 한국식 셰딩(Shedding) 게임입니다.
-                  각 플레이어는 15장의 타일을 받으며,
+                  렉시오는 5명이 즐기는 한국식 셰딩(Shedding) 게임입니다.
+                  각 플레이어는 12장의 타일을 받으며,
                   손에 든 타일을 가장 먼저 모두 내려놓는 사람이 승리합니다.
                   돌아가며 한 명씩 같은 종류의 더 강한 조합을 내거나 패스합니다.
                 </p>
               </section>
 
-              <section>
+              <section className="lexio-rule-section">
                 <h3 className="text-xs tracking-[0.3em] uppercase text-purple-300/80 mb-3">
                   타일 구성
                 </h3>
@@ -648,16 +734,16 @@ export default function Lexio() {
                   </li>
                   <li>
                     <strong>색상 강도</strong>(약 → 강):{' '}
-                    <span style={{ color: COLOR_HEX.green }}>녹</span> &lt;{' '}
                     <span style={{ color: COLOR_HEX.blue }}>청</span> &lt;{' '}
                     <span style={{ color: COLOR_HEX.yellow }}>황</span> &lt;{' '}
+                    <span style={{ color: COLOR_HEX.green }}>녹</span> &lt;{' '}
                     <span style={{ color: COLOR_HEX.red }}>홍</span>
                   </li>
-                  <li>가장 약한 타일은 <strong>3-녹</strong>, 가장 강한 타일은 <strong>2-홍</strong>입니다.</li>
+                  <li>가장 약한 타일은 <strong>3-청</strong>, 가장 강한 타일은 <strong>2-홍</strong>입니다.</li>
                 </ul>
               </section>
 
-              <section>
+              <section className="lexio-rule-section">
                 <h3 className="text-xs tracking-[0.3em] uppercase text-purple-300/80 mb-3">
                   조합 종류
                 </h3>
@@ -677,12 +763,12 @@ export default function Lexio() {
                 </p>
               </section>
 
-              <section>
+              <section className="lexio-rule-section">
                 <h3 className="text-xs tracking-[0.3em] uppercase text-purple-300/80 mb-3">
                   진행 방식
                 </h3>
                 <ul className="text-purple-100/85 text-sm space-y-1.5 list-disc list-inside">
-                  <li>가장 약한 타일(3-녹 등)을 가진 사람이 첫 라운드를 시작합니다.</li>
+                  <li>가장 약한 타일(3-청 등)을 가진 사람이 첫 라운드를 시작합니다.</li>
                   <li>첫 트릭에서는 반드시 가장 약한 타일을 포함해서 내야 합니다.</li>
                   <li>이후 같은 장수의 더 강한 조합을 내거나 패스합니다.</li>
                   <li>1, 2, 3장 조합은 같은 종류끼리만 비교합니다.</li>
@@ -768,9 +854,9 @@ export default function Lexio() {
                 렉시오에 오신 것을 환영합니다
               </h2>
               <p className="text-purple-100/70 text-sm mb-8 leading-relaxed">
-                3명의 AI 상대와 함께 즐기는 한국식 셰딩 게임.
+                4명의 AI 상대와 함께 즐기는 5인 한국식 셰딩 게임.
                 <br />
-                가장 먼저 손패를 모두 비우는 사람이 승리합니다.
+                각자 12장의 타일을 받아 가장 먼저 손패를 모두 비우면 승리합니다.
               </p>
               <button
                 onClick={startGame}
@@ -800,34 +886,22 @@ export default function Lexio() {
               minHeight: '720px',
             }}
           >
-            {/* Top AI */}
-            <div className="flex justify-center mb-4">
-              {aiSlots[1] && (
+            {/* Top row: 4 AI players */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+              {aiPlayers.map((ai) => (
                 <PlayerCard
-                  player={aiSlots[1]}
-                  isActive={currentPlayerIdx === players.indexOf(aiSlots[1])}
+                  key={ai.id}
+                  player={ai}
+                  isActive={currentPlayerIdx === players.indexOf(ai)}
                   position="top"
                 />
-              )}
+              ))}
             </div>
 
-            {/* Middle: left AI - center play - right AI */}
-            <div className="flex items-center justify-between gap-4 mb-6">
-              <div className="flex-1 flex justify-start">
-                {aiSlots[0] && (
-                  <PlayerCard
-                    player={aiSlots[0]}
-                    isActive={
-                      currentPlayerIdx === players.indexOf(aiSlots[0])
-                    }
-                    position="left"
-                  />
-                )}
-              </div>
-
-              {/* Center play area */}
+            {/* Center play area */}
+            <div className="flex justify-center mb-5">
               <div
-                className="rounded-2xl px-6 py-5 min-w-[340px] max-w-md"
+                className="rounded-2xl px-6 py-5 min-w-[340px] max-w-2xl w-full"
                 style={{
                   background:
                     'linear-gradient(180deg, rgba(15,12,40,0.7) 0%, rgba(8,7,25,0.8) 100%)',
@@ -861,18 +935,6 @@ export default function Lexio() {
                   <div className="text-center text-purple-100/40 text-xs tracking-[0.3em] uppercase py-8">
                     {phase === 'finished' ? 'Game Over' : 'Lead the trick'}
                   </div>
-                )}
-              </div>
-
-              <div className="flex-1 flex justify-end">
-                {aiSlots[2] && (
-                  <PlayerCard
-                    player={aiSlots[2]}
-                    isActive={
-                      currentPlayerIdx === players.indexOf(aiSlots[2])
-                    }
-                    position="right"
-                  />
                 )}
               </div>
             </div>
