@@ -575,6 +575,7 @@ function OpponentSeat({
   showPass,
   reveal,
   peerCoins,
+  sessionCoins,
 }: {
   player: LexioPlayer;
   seatPosition: [number, number, number];
@@ -584,6 +585,8 @@ function OpponentSeat({
   showPass: boolean;
   reveal: boolean;
   peerCoins: LexioPlayerFinishCoins | null;
+  /** 세션 누적 코인 (진행 중 이름 아래) */
+  sessionCoins: number;
 }) {
   const handCount = player.hand.length;
   const backCount = Math.min(handCount, 14);
@@ -629,6 +632,18 @@ function OpponentSeat({
               outlineColor="#1e1b4b"
             >
               {player.name}
+            </Text>
+          </Billboard>
+          <Billboard position={[0, 1.28, 0]}>
+            <Text
+              fontSize={0.092}
+              color="#fcd34d"
+              anchorX="center"
+              anchorY="middle"
+              outlineWidth={0.012}
+              outlineColor="#120b05"
+            >
+              {`🪙 ${sessionCoins}`}
             </Text>
           </Billboard>
         </>
@@ -706,11 +721,40 @@ function TableRoom() {
   );
 }
 
-function CenterPlay3D({ combo }: { combo: LexioCombination | null }) {
+function CenterPlay3D({
+  combo,
+  flatOnTable = false,
+}: {
+  combo: LexioCombination | null;
+  /** true면 테이블에 눕힘 — 판 종료 탑다운에서 잘 보이게 */
+  flatOnTable?: boolean;
+}) {
   if (!combo) return null;
   const n = combo.tiles.length;
   const gap = TILE_W * 1.1;
   const total = (n - 1) * gap;
+
+  if (flatOnTable) {
+    return (
+      <group
+        position={[0, TABLE_TOP_Y + TILE_T / 2 + 0.0015, -0.2]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        {combo.tiles.map((t, i) => (
+          <LexioTile3D
+            key={t.id}
+            tile={t}
+            position={[-total / 2 + i * gap, 0, 0]}
+            rotation={[0, 0, 0]}
+            dimmed={false}
+            facePointerHover={false}
+            finishReveal
+          />
+        ))}
+      </group>
+    );
+  }
+
   return (
     <group position={[0, TILE_CENTER_Y, -0.2]} rotation={[TILT_BACK, 0, 0]}>
       {combo.tiles.map((t, i) => (
@@ -794,6 +838,7 @@ function SceneContent({
   phase,
   discardPlacements,
   finishTableUi,
+  sessionCoinsByPlayerId,
 }: {
   players: LexioPlayer[];
   currentPlayerIdx: number;
@@ -804,6 +849,7 @@ function SceneContent({
   phase: 'setup' | 'playing' | 'finished';
   discardPlacements: LexioDiscardPlacement[];
   finishTableUi: LexioFinishTableUi | null;
+  sessionCoinsByPlayerId: Record<number, number>;
 }) {
   const aiPlayers = useMemo(() => players.filter((p) => p.isAI), [players]);
 
@@ -863,7 +909,7 @@ function SceneContent({
       <TableRoom />
       <DiscardPile3D placements={discardPlacements} />
       {/** 진행 중·종료 후: 테이블 중앙 마지막 조합(승리 직전 내기) 유지 */}
-      <CenterPlay3D combo={currentPlay} />
+      <CenterPlay3D combo={currentPlay} flatOnTable={phase === 'finished'} />
 
       {seats.map(({ player, pos, yaw, cardYaw }) => {
         const idx = players.findIndex((p) => p.id === player.id);
@@ -881,6 +927,7 @@ function SceneContent({
               finishTableUi?.playersCoins.find((c) => c.playerId === player.id) ??
               null
             }
+            sessionCoins={sessionCoinsByPlayerId[player.id] ?? 0}
           />
         );
       })}
@@ -973,6 +1020,7 @@ export default function LexioFirstPersonScene({
   phase,
   discardPlacements = [],
   finishTableUi = null,
+  sessionCoinsByPlayerId = {},
 }: {
   players: LexioPlayer[];
   currentPlayerIdx: number;
@@ -983,6 +1031,7 @@ export default function LexioFirstPersonScene({
   phase: 'setup' | 'playing' | 'finished';
   discardPlacements?: LexioDiscardPlacement[];
   finishTableUi?: LexioFinishTableUi | null;
+  sessionCoinsByPlayerId?: Record<number, number>;
 }) {
   return (
     <Canvas
@@ -1003,6 +1052,7 @@ export default function LexioFirstPersonScene({
           phase={phase}
           discardPlacements={discardPlacements}
           finishTableUi={finishTableUi}
+          sessionCoinsByPlayerId={sessionCoinsByPlayerId}
         />
       </Suspense>
     </Canvas>

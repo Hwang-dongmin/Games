@@ -875,14 +875,14 @@ export default function Lexio() {
                   세션 · 코인
                 </h3>
                 <ul className="list-inside list-disc space-y-1.5 text-sm text-purple-100/85">
-                  <li>시작할 때 최대 20판까지 몇 판 할지 정합니다.</li>
+                  <li>시작할 때 총 라운드 수를 정합니다.(최대 20판)</li>
                   <li>
                     한 판이 끝날 때마다, 각자 손에 남은 타일 수만큼 코인을
                     얻습니다.
                   </li>
                   <li>
-                    그때 손에 <strong>2</strong> 숫자 타일이 하나라도 있으면
-                    그 사람의 그 판 코인이 2배입니다.
+                    이때 손에 <strong>2</strong> 숫자 타일이 n장만큼 있으면
+                    그 사람의 코인이 2의 n승배만큼 코인을 먹습니다.
                   </li>
                 </ul>
               </section>
@@ -1116,6 +1116,7 @@ export default function Lexio() {
                 phase={phase}
                 discardPlacements={discardPlacements}
                 finishTableUi={finishTableUi}
+                sessionCoinsByPlayerId={sessionCoinsByPlayerId}
               />
             </div>
 
@@ -1158,22 +1159,29 @@ export default function Lexio() {
                 className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-[#0a0a23]/95 via-[#0a0a23]/55 to-transparent px-4 pb-6 pt-16"
               >
                 <div className="pointer-events-none mx-auto flex max-w-2xl flex-col items-center gap-3">
-                  <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-purple-200/90">
-                    <Users className="h-3.5 w-3.5 text-purple-300" />
-                    <span className="font-semibold">{humanPlayer.name}</span>
-                    <span className="text-purple-300/75">
-                      ({humanPlayer.hand.length}장)
-                    </span>
-                    {isHumanTurn && phase === 'playing' && (
-                      <span
-                        className="ml-1 rounded-full px-2 py-0.5 text-[10px] tracking-[0.25em] uppercase"
-                        style={{
-                          background:
-                            'linear-gradient(180deg, rgba(168,85,247,0.5) 0%, rgba(91,33,182,0.6) 100%)',
-                          boxShadow: 'inset 0 0 0 1px rgba(168,85,247,0.8)',
-                        }}
-                      >
-                        당신 차례
+                  <div className="flex flex-col items-center gap-0.5">
+                    <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-purple-200/90">
+                      <Users className="h-3.5 w-3.5 text-purple-300" />
+                      <span className="font-semibold">{humanPlayer.name}</span>
+                      <span className="text-purple-300/75">
+                        ({humanPlayer.hand.length}장)
+                      </span>
+                      {isHumanTurn && phase === 'playing' && (
+                        <span
+                          className="ml-1 rounded-full px-2 py-0.5 text-[10px] tracking-[0.25em] uppercase"
+                          style={{
+                            background:
+                              'linear-gradient(180deg, rgba(168,85,247,0.5) 0%, rgba(91,33,182,0.6) 100%)',
+                            boxShadow: 'inset 0 0 0 1px rgba(168,85,247,0.8)',
+                          }}
+                        >
+                          당신 차례
+                        </span>
+                      )}
+                    </div>
+                    {(phase === 'playing' || phase === 'finished') && (
+                      <span className="text-[11px] font-medium tabular-nums text-amber-200/90">
+                        🪙 {sessionCoinsByPlayerId[humanPlayer.id] ?? 0}
                       </span>
                     )}
                   </div>
