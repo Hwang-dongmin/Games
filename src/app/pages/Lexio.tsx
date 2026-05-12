@@ -1,12 +1,25 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from 'react';
 import { Link } from 'react-router';
-import { Home, RotateCcw, BookOpen, X, Users, Crown, Sparkles } from 'lucide-react';
+import {
+  Home,
+  RotateCcw,
+  BookOpen,
+  X,
+  Users,
+  Settings,
+  ChevronLeft,
+} from 'lucide-react';
 import {
   LexioTile,
   LexioPlayer,
   LexioCombination,
   COLOR_HEX,
-  COLOR_KOREAN,
   createDeck,
   shuffle,
   sortHand,
@@ -15,12 +28,32 @@ import {
   comboKorean,
   aiFindMove,
   findStarterIndex,
-  hasLowestTile,
-  tileStrength,
+  roundCoinForHand,
 } from '../utils/lexio';
+import LexioFirstPersonScene from './lexio/LexioFirstPersonScene';
+import {
+  LexioPlayCard,
+  lexioColorToSuit,
+} from '../components/lexio/LexioPlayCard';
+
+type DiscardPlacement = {
+  key: string;
+  x: number;
+  y: number;
+  z: number;
+  rx: number;
+  ry: number;
+  rz: number;
+};
 
 type GamePhase = 'setup' | 'playing' | 'finished';
 type UiPlayer = LexioPlayer;
+type LastRoundCoinRow = {
+  playerId: number;
+  earned: number;
+  doubled: boolean;
+};
+
 type PersistedLexioState = {
   players: UiPlayer[];
   currentPlay: LexioCombination | null;
@@ -31,228 +64,62 @@ type PersistedLexioState = {
   selectedIds: number[];
   message: string;
   lastPlayedByIdx: number | null;
-  isFirstTrick: boolean;
+  discardPlacements: DiscardPlacement[];
+  sessionTotalRounds: number;
+  sessionCompletedRounds: number;
+  sessionCoinsByPlayerId: Record<string, number>;
+  lastRoundCoinRows: LastRoundCoinRow[];
+  /** v2 이하 마이그레이션용 */
+  humanCoinTotal?: number;
+  lastRoundCoinEarned?: number;
+  lastRoundCoinDouble?: boolean;
 };
 
 const NUM_PLAYERS = 5;
 const HAND_SIZE = 12;
-const LEXIO_STORAGE_KEY = 'lexio-state-v1';
+const LEXIO_STORAGE_KEY = 'lexio-state-v3';
+const MAX_SESSION_ROUNDS = 20;
 
-/** 2 타일은 금색 베이스라 밝은 색(특히 황)이 묻힘 → 글자·한글 라벨용 진한 톤 */
-const TWO_TILE_INK: Record<LexioTile['color'], string> = {
-  green: '#166534',
-  blue: '#1e3a8a',
-  yellow: '#713f12',
-  red: '#991b1b',
-};
+/** 테이블 위(+Y)에서 볼 때 반시계방향 차례: 남(0)→서(1)→북서(3)→북동(4)→동(2) */
+const PLAYER_TURN_ORDER = [0, 1, 3, 4, 2] as const;
 
-function Tile({
-  tile,
-  selected,
-  onClick,
-  small,
-  highlight,
-}: {
-  tile: LexioTile;
-  selected?: boolean;
-  onClick?: () => void;
-  small?: boolean;
-  highlight?: boolean;
-}) {
-  const color = COLOR_HEX[tile.color];
-  const sizeCls = small ? 'w-9 h-12 text-base' : 'w-14 h-20 text-2xl';
-  const isTwo = tile.number === 2;
-  const isOne = tile.number === 1;
-  const inkColor = isTwo ? TWO_TILE_INK[tile.color] : color;
-
-  // 2 타일: 골드 베이스 + 색상 보더 + 광채
-  // 1 타일: 미세하게 강조된 베이스
-  // 그 외: 일반 흰 베이스
-  const baseBackground = isTwo
-    ? `radial-gradient(ellipse at 30% 20%, #fff8d4 0%, #fde68a 30%, #f59e0b 65%, #b45309 100%)`
-    : isOne
-      ? 'linear-gradient(180deg, #fefce8 0%, #fde68a 100%)'
-      : 'linear-gradient(180deg, #fafaf9 0%, #e7e5e4 100%)';
-
-  const baseShadow = selected
-    ? `0 0 0 2px ${color}, 0 10px 20px -6px rgba(0,0,0,0.6)`
-    : highlight
-      ? `0 0 0 2px rgba(255,255,255,0.6), 0 8px 18px -6px rgba(0,0,0,0.55)`
-      : isTwo
-        ? `0 0 0 2px ${color}, 0 0 14px ${color}88, 0 8px 18px -4px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.5)`
-        : isOne
-          ? `0 6px 14px -6px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(245,158,11,0.4)`
-          : '0 6px 14px -6px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(0,0,0,0.1)';
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`relative ${sizeCls} rounded-md shrink-0 transition-all duration-150 overflow-hidden ${
-        onClick ? 'cursor-pointer hover:-translate-y-1' : 'cursor-default'
-      } ${selected ? '-translate-y-3' : ''} ${
-        isTwo ? 'animate-[lexioGlow_2.4s_ease-in-out_infinite]' : ''
-      }`}
-      style={{
-        background: baseBackground,
-        boxShadow: baseShadow,
-      }}
-    >
-      {/* 2 타일 전용 화려한 배경 장식 */}
-      {isTwo && (
-        <>
-          {/* 빛나는 광채 */}
-          <span
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              background:
-                'radial-gradient(circle at 30% 25%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0) 45%)',
-            }}
-          />
-          {/* 골드 보더 안쪽 라인 */}
-          <span
-            className="absolute inset-[3px] rounded-[3px] pointer-events-none"
-            style={{
-              boxShadow:
-                'inset 0 0 0 1px rgba(180,83,9,0.5), inset 0 0 0 2px rgba(255,255,255,0.4)',
-            }}
-          />
-          {/* 십자 다이아몬드 무늬 */}
-          <span
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              backgroundImage:
-                'repeating-linear-gradient(45deg, rgba(180,83,9,0.18) 0px, rgba(180,83,9,0.18) 1px, transparent 1px, transparent 6px), repeating-linear-gradient(-45deg, rgba(180,83,9,0.18) 0px, rgba(180,83,9,0.18) 1px, transparent 1px, transparent 6px)',
-              mixBlendMode: 'overlay',
-            }}
-          />
-          {/* 왕관 아이콘 (large only) */}
-          {!small && (
-            <Crown
-              className="absolute top-1 left-1/2 -translate-x-1/2 w-3 h-3"
-              style={{
-                color: '#7c2d12',
-                filter: 'drop-shadow(0 0 2px rgba(255,255,255,0.7))',
-              }}
-              strokeWidth={2.5}
-            />
-          )}
-          {/* 별 장식 */}
-          <Sparkles
-            className={`absolute ${
-              small ? 'top-0 right-0 w-2 h-2' : 'top-1 right-1 w-2.5 h-2.5'
-            }`}
-            style={{
-              color: '#fffbeb',
-              filter: 'drop-shadow(0 0 2px rgba(255,200,50,0.9))',
-            }}
-            strokeWidth={2.5}
-          />
-          <Sparkles
-            className={`absolute ${
-              small ? 'bottom-0 left-0 w-2 h-2' : 'bottom-1 left-1 w-2.5 h-2.5'
-            } rotate-180`}
-            style={{
-              color: '#fffbeb',
-              filter: 'drop-shadow(0 0 2px rgba(255,200,50,0.9))',
-            }}
-            strokeWidth={2.5}
-          />
-        </>
-      )}
-
-      {/* 1 타일: 살짝 화려한 곡선 장식 */}
-      {isOne && !small && (
-        <span
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background:
-              'radial-gradient(circle at 50% 50%, rgba(245,158,11,0.18) 0%, rgba(245,158,11,0) 60%)',
-          }}
-        />
-      )}
-
-      {/* 좌측 상단 숫자 */}
-      <span
-        className={`absolute top-0.5 left-1 ${
-          small ? 'text-[10px]' : 'text-xs'
-        } font-bold leading-none z-10`}
-        style={{
-          color: inkColor,
-          textShadow: isTwo
-            ? '0 0 1px rgba(255,255,255,0.9), 0 1px 2px rgba(0,0,0,0.35)'
-            : undefined,
-        }}
-      >
-        {tile.number}
-      </span>
-
-      {/* 중앙 큰 숫자 */}
-      <span
-        className={`absolute inset-0 flex items-center justify-center font-extrabold z-10 ${
-          small ? 'text-base' : isTwo ? 'text-3xl' : 'text-2xl'
-        }`}
-        style={{
-          color: inkColor,
-          textShadow: isTwo
-            ? '0 0 1px rgba(255,255,255,0.95), 0 1px 0 rgba(255,255,255,0.35), 0 2px 4px rgba(0,0,0,0.35)'
-            : undefined,
-          fontFamily: isTwo ? 'Georgia, serif' : undefined,
-          fontStyle: isTwo ? 'italic' : undefined,
-        }}
-      >
-        {tile.number}
-      </span>
-
-      {/* 우측 하단 숫자 */}
-      <span
-        className={`absolute bottom-0.5 right-1 ${
-          small ? 'text-[10px]' : 'text-xs'
-        } font-bold leading-none rotate-180 z-10`}
-        style={{
-          color: inkColor,
-          textShadow: isTwo
-            ? '0 0 1px rgba(255,255,255,0.9), 0 1px 2px rgba(0,0,0,0.35)'
-            : undefined,
-        }}
-      >
-        {tile.number}
-      </span>
-
-      {/* 좌측 하단 색상 한글 */}
-      <span
-        className={`absolute bottom-0.5 left-1 tracking-wider font-semibold z-10 ${
-          isTwo && !small ? 'text-[10px]' : 'text-[8px]'
-        }`}
-        style={{
-          color: inkColor,
-          textShadow: isTwo
-            ? '0 0 1px rgba(255,255,255,0.85), 0 1px 2px rgba(0,0,0,0.3)'
-            : undefined,
-        }}
-      >
-        {COLOR_KOREAN[tile.color]}
-      </span>
-    </button>
-  );
+function mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a += 0x6d2b79f5;
+    let t = Math.imul(a ^ (a >>> 15), a | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-function TileBack({ small }: { small?: boolean }) {
-  const sizeCls = small ? 'w-7 h-10' : 'w-9 h-12';
-  return (
-    <div
-      className={`${sizeCls} rounded-md shrink-0`}
-      style={{
-        background:
-          'linear-gradient(135deg, #4c1d95 0%, #1e1b4b 100%)',
-        boxShadow:
-          '0 4px 10px -2px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(168,85,247,0.5)',
-        backgroundImage:
-          'repeating-linear-gradient(45deg, rgba(168,85,247,0.18) 0px, rgba(168,85,247,0.18) 2px, transparent 2px, transparent 6px), repeating-linear-gradient(-45deg, rgba(168,85,247,0.18) 0px, rgba(168,85,247,0.18) 2px, transparent 2px, transparent 6px)',
-      }}
-    />
+function nextTurnPlayerIndex(
+  currentIdx: number,
+  playersList: LexioPlayer[],
+): number {
+  const n = playersList.length;
+  const start = PLAYER_TURN_ORDER.indexOf(
+    currentIdx as (typeof PLAYER_TURN_ORDER)[number],
   );
+  if (start === -1) {
+    let nxt = (currentIdx + 1) % n;
+    let safety = 0;
+    while (playersList[nxt].hand.length === 0 && safety < n) {
+      nxt = (nxt + 1) % n;
+      safety++;
+    }
+    return nxt;
+  }
+  for (let step = 1; step <= n; step++) {
+    const idx =
+      PLAYER_TURN_ORDER[(start + step) % PLAYER_TURN_ORDER.length];
+    if (playersList[idx].hand.length > 0) return idx;
+  }
+  return currentIdx;
 }
+
+/** 전판 최약 타일: 파랑(청) 3 — 안내 문구 통일 */
+const LOWEST_TILE_LABEL = '가장 낮은 타일(파3)';
 
 function makePlayers(numAI: number): UiPlayer[] {
   const players: UiPlayer[] = [
@@ -293,17 +160,59 @@ export default function Lexio() {
   const [phase, setPhase] = useState<GamePhase>('setup');
   const [winnerId, setWinnerId] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [message, setMessage] = useState('게임을 시작하세요!');
-  const [showRules, setShowRules] = useState(false);
-  const [showNewGameConfirm, setShowNewGameConfirm] = useState(false);
+  const [message, setMessage] = useState('');
+  const [lexioMenuOpen, setLexioMenuOpen] = useState(false);
+  const [lexioModalView, setLexioModalView] = useState<
+    'home' | 'rules' | 'newGame'
+  >('home');
   const [lastPlayedByIdx, setLastPlayedByIdx] = useState<number | null>(null);
-  const [isFirstTrick, setIsFirstTrick] = useState(false);
+  const [discardPlacements, setDiscardPlacements] = useState<
+    DiscardPlacement[]
+  >([]);
   const [hasHydrated, setHasHydrated] = useState(false);
+  const discardSeqRef = useRef(0);
+  const [pendingSessionRounds, setPendingSessionRounds] = useState(5);
+  const [sessionTotalRounds, setSessionTotalRounds] = useState(5);
+  const [sessionCompletedRounds, setSessionCompletedRounds] = useState(0);
+  const [sessionCoinsByPlayerId, setSessionCoinsByPlayerId] = useState<
+    Record<number, number>
+  >({});
+  const [lastRoundCoinRows, setLastRoundCoinRows] = useState<
+    LastRoundCoinRow[]
+  >([]);
 
   const humanPlayer = players.find((p) => !p.isAI);
 
-  // 게임 시작
-  const startGame = useCallback(() => {
+  const appendDiscardTiles = useCallback((tiles: LexioTile[]) => {
+    if (tiles.length === 0) return;
+    discardSeqRef.current += 1;
+    const seq = discardSeqRef.current;
+    setDiscardPlacements((prev) => {
+      const rnd = mulberry32(seq * 2654435761 + prev.length);
+      const baseLayer = prev.length;
+      const additions: DiscardPlacement[] = tiles.map((t, i) => {
+        const angle = rnd() * Math.PI * 2;
+        const radius = 0.22 + rnd() * 0.48;
+        const spreadZ = -0.26 + Math.sin(angle) * radius * 0.82;
+        const spreadX = Math.cos(angle) * radius * 0.88;
+        const stackLift = (baseLayer + i) * 0.008;
+        return {
+          key: `discard-${t.id}-s${seq}-i${i}`,
+          x: spreadX + (rnd() - 0.5) * 0.07,
+          y: 0.535 + stackLift + rnd() * 0.018,
+          z: spreadZ + (rnd() - 0.5) * 0.09,
+          rx: -0.12 + (rnd() - 0.5) * 0.55,
+          ry: rnd() * Math.PI * 2,
+          rz: (rnd() - 0.5) * 0.5,
+        };
+      });
+      return [...prev, ...additions];
+    });
+  }, []);
+
+  /** 새 판만 시작 (세션 코인·완료 판 수는 유지) */
+  const dealNewHand = useCallback(() => {
+    setLastRoundCoinRows([]);
     const dealt = dealHands(makePlayers(NUM_PLAYERS - 1));
     const starter = findStarterIndex(dealt);
     setPlayers(dealt);
@@ -314,10 +223,48 @@ export default function Lexio() {
     setWinnerId(null);
     setSelectedIds([]);
     setLastPlayedByIdx(null);
-    setIsFirstTrick(true);
-    setMessage(
-      `${dealt[starter].name}이(가) 가장 낮은 타일을 가지고 있어 먼저 시작합니다.`,
+    setDiscardPlacements([]);
+    setMessage('');
+  }, []);
+
+  /** 첫 화면에서 판 수 정한 뒤 세션 시작 */
+  const beginNewSessionFromSetup = useCallback(() => {
+    const rounds = Math.min(
+      MAX_SESSION_ROUNDS,
+      Math.max(1, Math.floor(pendingSessionRounds)),
     );
+    setSessionTotalRounds(rounds);
+    setSessionCompletedRounds(0);
+    setSessionCoinsByPlayerId({});
+    setLastRoundCoinRows([]);
+    const dealt = dealHands(makePlayers(NUM_PLAYERS - 1));
+    const starter = findStarterIndex(dealt);
+    setPlayers(dealt);
+    setCurrentPlay(null);
+    setTrickStarterIdx(null);
+    setCurrentPlayerIdx(starter);
+    setPhase('playing');
+    setWinnerId(null);
+    setSelectedIds([]);
+    setLastPlayedByIdx(null);
+    setDiscardPlacements([]);
+    setMessage('');
+  }, [pendingSessionRounds]);
+
+  const resetSessionToSetup = useCallback(() => {
+    setPlayers([]);
+    setCurrentPlay(null);
+    setTrickStarterIdx(null);
+    setCurrentPlayerIdx(0);
+    setPhase('setup');
+    setWinnerId(null);
+    setSelectedIds([]);
+    setLastPlayedByIdx(null);
+    setDiscardPlacements([]);
+    setMessage('');
+    setSessionCompletedRounds(0);
+    setSessionCoinsByPlayerId({});
+    setLastRoundCoinRows([]);
   }, []);
 
   // 선택된 타일들
@@ -338,9 +285,22 @@ export default function Lexio() {
       if (p && p.hand.length === 0) {
         setWinnerId(p.id);
         setPhase('finished');
-        setMessage(
-          `${p.name}이(가) 모든 타일을 내고 승리했습니다! 🎉`,
-        );
+        setMessage('');
+
+        const rows: LastRoundCoinRow[] = updatedPlayers.map((pl) => {
+          const { earned, doubled } = roundCoinForHand(pl.hand);
+          return { playerId: pl.id, earned, doubled };
+        });
+        setLastRoundCoinRows(rows);
+        setSessionCoinsByPlayerId((prev) => {
+          const next = { ...prev };
+          for (const r of rows) {
+            next[r.playerId] = (next[r.playerId] ?? 0) + r.earned;
+          }
+          return next;
+        });
+        setSessionCompletedRounds((c) => c + 1);
+
         return true;
       }
       return false;
@@ -356,14 +316,10 @@ export default function Lexio() {
       newCurrentPlay: LexioCombination | null,
       playerWhoActedIdx: number,
     ) => {
-      // 다음 플레이어
-      let next = (playerWhoActedIdx + 1) % updatedPlayers.length;
-      // 빈 손 플레이어 스킵 (이론상 게임 종료 직전 외에는 없음)
-      let safety = 0;
-      while (updatedPlayers[next].hand.length === 0 && safety < NUM_PLAYERS) {
-        next = (next + 1) % updatedPlayers.length;
-        safety++;
-      }
+      const next = nextTurnPlayerIndex(
+        playerWhoActedIdx,
+        updatedPlayers,
+      );
 
       // 트릭 시작자에게 다시 차례가 돌아오면 → 모든 다른 플레이어가 패스했음
       if (
@@ -371,19 +327,20 @@ export default function Lexio() {
         next === newTrickStarterIdx &&
         newCurrentPlay !== null
       ) {
+        appendDiscardTiles(newCurrentPlay.tiles);
         // 트릭 리셋: 트릭 시작자가 새 트릭을 리드
         const reset = updatedPlayers.map((p) => ({ ...p, passed: false }));
         setPlayers(reset);
         setCurrentPlay(null);
         setTrickStarterIdx(null);
         setCurrentPlayerIdx(next);
-        setMessage(`모두 패스했습니다. ${reset[next].name}이(가) 새 라운드를 시작합니다.`);
+        setMessage('');
         return;
       }
 
       setCurrentPlayerIdx(next);
     },
-    [],
+    [appendDiscardTiles],
   );
 
   // 한 명이 플레이
@@ -392,22 +349,6 @@ export default function Lexio() {
       const combo = detectCombo(tiles);
       if (!combo) return false;
       if (currentPlay && !beats(combo, currentPlay)) return false;
-
-      // 첫 트릭은 가장 낮은 타일을 포함해야 함
-      if (isFirstTrick) {
-        let lowestStrength = Infinity;
-        let lowestId = -1;
-        for (const p of players) {
-          for (const t of p.hand) {
-            const s = tileStrength(t);
-            if (s < lowestStrength) {
-              lowestStrength = s;
-              lowestId = t.id;
-            }
-          }
-        }
-        if (!tiles.some((t) => t.id === lowestId)) return false;
-      }
 
       const tileIds = new Set(tiles.map((t) => t.id));
       const updated = players.map((p, idx) =>
@@ -419,21 +360,20 @@ export default function Lexio() {
             }
           : { ...p, passed: false },
       );
+      if (currentPlay?.tiles?.length) {
+        appendDiscardTiles(currentPlay.tiles);
+      }
       setPlayers(updated);
       setCurrentPlay(combo);
       setTrickStarterIdx(playerIdx);
       setLastPlayedByIdx(playerIdx);
-      setIsFirstTrick(false);
-      setMessage(
-        `${updated[playerIdx].name}이(가) ${comboKorean(combo.type)}를 냈습니다.`,
-      );
 
       if (checkWinner(updated, playerIdx)) return true;
 
       advanceTurn(updated, playerIdx, combo, playerIdx);
       return true;
     },
-    [players, currentPlay, isFirstTrick, advanceTurn, checkWinner],
+    [players, currentPlay, advanceTurn, checkWinner, appendDiscardTiles],
   );
 
   // 한 명이 패스
@@ -444,7 +384,6 @@ export default function Lexio() {
         idx === playerIdx ? { ...p, passed: true } : p,
       );
       setPlayers(updated);
-      setMessage(`${updated[playerIdx].name}이(가) 패스했습니다.`);
       advanceTurn(updated, trickStarterIdx, currentPlay, playerIdx);
       return true;
     },
@@ -462,6 +401,11 @@ export default function Lexio() {
     }
     const ok = doPlay(humanIdx, selectedTiles);
     if (!ok) {
+      const combo = detectCombo(selectedTiles);
+      if (!combo && selectedTiles.length > 0) {
+        setMessage('유효하지 않은 조합입니다.');
+        return;
+      }
       setMessage('유효하지 않은 조합이거나 현재 조합을 이기지 못합니다.');
       return;
     }
@@ -503,9 +447,47 @@ export default function Lexio() {
       setPhase(saved.phase ?? 'setup');
       setWinnerId(saved.winnerId ?? null);
       setSelectedIds(saved.selectedIds ?? []);
-      setMessage(saved.message ?? '게임을 시작하세요!');
+      setMessage(saved.message ?? '');
       setLastPlayedByIdx(saved.lastPlayedByIdx ?? null);
-      setIsFirstTrick(saved.isFirstTrick ?? false);
+      setDiscardPlacements(saved.discardPlacements ?? []);
+      const tr =
+        typeof saved.sessionTotalRounds === 'number'
+          ? Math.min(
+              MAX_SESSION_ROUNDS,
+              Math.max(1, Math.floor(saved.sessionTotalRounds)),
+            )
+          : 5;
+      setSessionTotalRounds(tr);
+      setSessionCompletedRounds(
+        typeof saved.sessionCompletedRounds === 'number'
+          ? Math.max(0, saved.sessionCompletedRounds)
+          : 0,
+      );
+      const scRaw = saved.sessionCoinsByPlayerId;
+      if (scRaw && typeof scRaw === 'object') {
+        const sc: Record<number, number> = {};
+        for (const [k, v] of Object.entries(scRaw)) {
+          const id = Number(k);
+          if (!Number.isFinite(id) || typeof v !== 'number') continue;
+          sc[id] = v;
+        }
+        setSessionCoinsByPlayerId(sc);
+      } else if (typeof saved.humanCoinTotal === 'number') {
+        setSessionCoinsByPlayerId({ 0: saved.humanCoinTotal });
+      } else {
+        setSessionCoinsByPlayerId({});
+      }
+      setLastRoundCoinRows(
+        Array.isArray(saved.lastRoundCoinRows)
+          ? saved.lastRoundCoinRows.filter(
+              (r): r is LastRoundCoinRow =>
+                r &&
+                typeof r.playerId === 'number' &&
+                typeof r.earned === 'number' &&
+                typeof r.doubled === 'boolean',
+            )
+          : [],
+      );
     } catch {
       window.localStorage.removeItem(LEXIO_STORAGE_KEY);
     } finally {
@@ -526,7 +508,11 @@ export default function Lexio() {
       selectedIds,
       message,
       lastPlayedByIdx,
-      isFirstTrick,
+      discardPlacements,
+      sessionTotalRounds,
+      sessionCompletedRounds,
+      sessionCoinsByPlayerId,
+      lastRoundCoinRows,
     };
     window.localStorage.setItem(LEXIO_STORAGE_KEY, JSON.stringify(toSave));
   }, [
@@ -540,7 +526,11 @@ export default function Lexio() {
     selectedIds,
     message,
     lastPlayedByIdx,
-    isFirstTrick,
+    discardPlacements,
+    sessionTotalRounds,
+    sessionCompletedRounds,
+    sessionCoinsByPlayerId,
+    lastRoundCoinRows,
   ]);
 
   // AI 자동 진행
@@ -550,10 +540,8 @@ export default function Lexio() {
     if (!current || !current.isAI) return;
 
     const timer = setTimeout(() => {
-      const mustIncludeLowest = isFirstTrick && trickStarterIdx === null;
-      const move = aiFindMove(current.hand, currentPlay, mustIncludeLowest);
+      const move = aiFindMove(current.hand, currentPlay);
       if (move === null) {
-        // 패스 (리드 차례엔 패스 불가이지만 mustInclude 케이스 외 대부분 정상)
         if (currentPlay) {
           doPass(currentPlayerIdx);
         } else {
@@ -573,109 +561,122 @@ export default function Lexio() {
     phase,
     players,
     currentPlay,
-    isFirstTrick,
     trickStarterIdx,
     doPlay,
     doPass,
   ]);
 
   const humanIdx = players.findIndex((p) => !p.isAI);
+  const humanSessionCoins =
+    humanIdx >= 0
+      ? (sessionCoinsByPlayerId[players[humanIdx]?.id ?? -1] ?? 0)
+      : 0;
   const isHumanTurn = humanIdx === currentPlayerIdx && phase === 'playing';
 
   const canHumanPlay =
     isHumanTurn &&
     selectedCombo !== null &&
-    (currentPlay === null || beats(selectedCombo, currentPlay)) &&
-    (!isFirstTrick || (humanPlayer && hasLowestTileInSelection()));
+    (currentPlay === null || beats(selectedCombo, currentPlay));
 
-  function hasLowestTileInSelection(): boolean {
-    if (!isFirstTrick || !humanPlayer) return true;
-    let lowestStrength = Infinity;
-    let lowestId = -1;
-    for (const p of players) {
-      for (const t of p.hand) {
-        const s = tileStrength(t);
-        if (s < lowestStrength) {
-          lowestStrength = s;
-          lowestId = t.id;
-        }
+  const isTableView = phase === 'playing' || phase === 'finished';
+
+  const winnerPlayer = players.find((p) => p.id === winnerId);
+  const sessionHasNextHand = sessionCompletedRounds < sessionTotalRounds;
+
+  /** 판 종료 후 다음 판: Enter로 계속 */
+  useEffect(() => {
+    if (phase !== 'finished' || !sessionHasNextHand) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        dealNewHand();
       }
-    }
-    return selectedTiles.some((t) => t.id === lowestId);
-  }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [phase, sessionHasNextHand, dealNewHand]);
 
-  const aiPlayers = players.filter((p) => p.isAI);
-  // (5인 게임: 사람 1 + AI 4)
+  const finishTableUi = useMemo(() => {
+    if (phase !== 'finished') return null;
+    const playersCoins = players.map((p) => {
+      const row = lastRoundCoinRows.find((r) => r.playerId === p.id);
+      return {
+        playerId: p.id,
+        name: p.name,
+        roundEarned: row?.earned ?? 0,
+        sessionTotal: sessionCoinsByPlayerId[p.id] ?? 0,
+        doubledThisRound: row?.doubled ?? false,
+      };
+    });
+    return {
+      playersCoins,
+      completedRounds: sessionCompletedRounds,
+      totalRounds: sessionTotalRounds,
+      winnerName: winnerPlayer?.name ?? null,
+      hasNextHand: sessionHasNextHand,
+      onNextHand: dealNewHand,
+      onBackToSetup: resetSessionToSetup,
+    };
+  }, [
+    phase,
+    players,
+    lastRoundCoinRows,
+    sessionCoinsByPlayerId,
+    sessionCompletedRounds,
+    sessionTotalRounds,
+    winnerPlayer?.name,
+    sessionHasNextHand,
+    dealNewHand,
+    resetSessionToSetup,
+  ]);
+
+  const closeLexioMenu = useCallback(() => {
+    setLexioMenuOpen(false);
+    setLexioModalView('home');
+  }, []);
+
+  const openLexioOptions = useCallback(() => {
+    setLexioModalView('home');
+    setLexioMenuOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (!lexioMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeLexioMenu();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lexioMenuOpen, closeLexioMenu]);
 
   return (
     <div
-      className="min-h-screen p-4 text-slate-100"
-      style={{
-        background:
-          'radial-gradient(ellipse at top, #2e1065 0%, #1e1b4b 45%, #0a0a23 100%)',
-      }}
-    >
-      {/* New Game Confirmation Modal */}
-      {showNewGameConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4">
-          <div
-            className="rounded-2xl max-w-md w-full p-7"
-            style={{
+      className={`min-h-screen text-slate-100 ${isTableView ? 'p-0' : 'p-4'}`}
+      style={
+        isTableView
+          ? { background: '#0a0a23' }
+          : {
               background:
-                'linear-gradient(180deg, #1e1b4b 0%, #0a0a23 100%)',
-              boxShadow:
-                '0 0 0 1px rgba(168,85,247,0.4), 0 30px 60px -20px rgba(0,0,0,0.8)',
-            }}
-          >
-            <p className="text-[10px] tracking-[0.4em] text-purple-300/80 uppercase text-center mb-2">
-              Confirm
-            </p>
-            <h2 className="text-2xl font-serif tracking-wide text-purple-100 mb-4 text-center">
-              새 게임 시작
-            </h2>
-            <p className="text-purple-100/80 text-center mb-7 text-sm leading-relaxed">
-              정말로 새 게임을 시작하시겠습니까?
-              <br />
-              <span className="text-purple-100/50">
-                현재 진행 중인 게임이 초기화됩니다.
-              </span>
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowNewGameConfirm(false)}
-                className="flex-1 rounded-full px-6 py-3 text-xs tracking-[0.3em] uppercase font-semibold text-slate-200 transition-all hover:-translate-y-0.5"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.15)',
-                }}
-              >
-                취소
-              </button>
-              <button
-                onClick={() => {
-                  setShowNewGameConfirm(false);
-                  startGame();
-                }}
-                className="flex-1 rounded-full px-6 py-3 text-xs tracking-[0.3em] uppercase font-semibold text-purple-100 transition-all hover:-translate-y-0.5"
-                style={{
-                  background:
-                    'linear-gradient(180deg, rgba(168,85,247,0.4) 0%, rgba(91,33,182,0.5) 100%)',
-                  boxShadow:
-                    'inset 0 0 0 1px rgba(168,85,247,0.65), 0 8px 20px -10px rgba(168,85,247,0.5)',
-                }}
-              >
-                확인
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Rules Modal */}
-      {showRules && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4">
+                'radial-gradient(ellipse at top, #2e1065 0%, #1e1b4b 45%, #0a0a23 100%)',
+            }
+      }
+    >
+      {/* 옵션: 중앙 모달 — 규칙 / 새 게임 (2초 페이드인) */}
+      {lexioMenuOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="lexio-menu-overlay absolute inset-0 bg-black/75 backdrop-blur-md"
+            aria-label="메뉴 닫기"
+            onClick={closeLexioMenu}
+          />
           <div
-            className="lexio-rules-panel rounded-2xl max-w-3xl w-full max-h-[88vh] overflow-hidden flex flex-col"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="lexio-modal-title"
+            className={`lexio-rules-panel lexio-menu-dialog relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden rounded-2xl shadow-2xl ${
+              lexioModalView === 'home' ? 'max-w-md' : 'max-w-3xl'
+            }`}
             style={{
               background:
                 'linear-gradient(180deg, #1e1b4b 0%, #0a0a23 100%)',
@@ -684,37 +685,105 @@ export default function Lexio() {
             }}
           >
             <div
-              className="p-6 flex items-center justify-between backdrop-blur-md shrink-0"
+              className="flex shrink-0 items-center justify-between gap-3 p-5 backdrop-blur-md sm:p-6"
               style={{
                 background:
                   'linear-gradient(180deg, rgba(30,27,75,0.95) 0%, rgba(30,27,75,0.85) 100%)',
                 borderBottom: '1px solid rgba(168,85,247,0.3)',
               }}
             >
-              <div>
-                <p className="text-[10px] tracking-[0.4em] text-purple-300/80 uppercase mb-1">
-                  Game Guide
-                </p>
-                <h2 className="text-2xl font-serif tracking-wide text-purple-100 flex items-center gap-2.5">
-                  <BookOpen className="w-5 h-5 text-purple-300/80" />
-                  렉시오 게임 규칙
-                </h2>
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                {lexioModalView !== 'home' && (
+                  <button
+                    type="button"
+                    onClick={() => setLexioModalView('home')}
+                    className="shrink-0 rounded-full p-1.5 text-slate-300/80 transition-colors hover:bg-white/[0.08] hover:text-purple-200"
+                    aria-label="옵션으로 돌아가기"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                )}
+                <div className="min-w-0">
+                  <p className="mb-1 text-[10px] uppercase tracking-[0.4em] text-purple-300/80">
+                    {lexioModalView === 'home'
+                      ? 'Options'
+                      : lexioModalView === 'rules'
+                        ? 'Guide'
+                        : 'Game'}
+                  </p>
+                  <h2
+                    id="lexio-modal-title"
+                    className="flex items-center gap-2.5 font-serif text-lg tracking-wide text-purple-100 sm:text-2xl"
+                  >
+                    {lexioModalView === 'home' && (
+                      <>
+                        <Settings className="h-5 w-5 shrink-0 text-purple-300/80" />
+                        옵션
+                      </>
+                    )}
+                    {lexioModalView === 'rules' && (
+                      <>
+                        <BookOpen className="h-5 w-5 shrink-0 text-purple-300/80" />
+                        렉시오 게임 규칙
+                      </>
+                    )}
+                    {lexioModalView === 'newGame' && (
+                      <>
+                        <RotateCcw className="h-5 w-5 shrink-0 text-purple-300/80" />
+                        새 게임
+                      </>
+                    )}
+                  </h2>
+                </div>
               </div>
               <button
-                onClick={() => setShowRules(false)}
-                className="text-slate-300/70 hover:text-purple-200 transition-colors rounded-full p-1.5 hover:bg-white/[0.05]"
-                aria-label="Close"
+                type="button"
+                onClick={closeLexioMenu}
+                className="shrink-0 rounded-full p-1.5 text-slate-300/70 transition-colors hover:bg-white/[0.05] hover:text-purple-200"
+                aria-label="닫기"
               >
-                <X className="w-5 h-5" />
+                <X className="h-5 w-5" />
               </button>
             </div>
 
-            <div className="lexio-rules-scroll p-6 space-y-4 text-slate-100 overflow-y-auto">
+            {lexioModalView === 'home' && (
+              <div className="grid grid-cols-2 gap-3 p-5 sm:gap-4 sm:p-6">
+                <button
+                  type="button"
+                  onClick={() => setLexioModalView('rules')}
+                  className="flex min-h-[5.5rem] w-full flex-col items-center justify-center gap-2 rounded-2xl px-3 py-4 text-center text-sm font-semibold leading-snug tracking-wide text-purple-100 transition-all hover:-translate-y-0.5 sm:min-h-[6.25rem] sm:px-4"
+                  style={{
+                    background: 'rgba(255,255,255,0.06)',
+                    boxShadow: 'inset 0 0 0 1px rgba(168,85,247,0.45)',
+                  }}
+                >
+                  <BookOpen className="h-5 w-5 shrink-0 sm:h-6 sm:w-6" />
+                  게임 규칙
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLexioModalView('newGame')}
+                  className="flex min-h-[5.5rem] w-full flex-col items-center justify-center gap-2 rounded-2xl px-3 py-4 text-center text-sm font-semibold leading-snug tracking-wide text-purple-100 transition-all hover:-translate-y-0.5 sm:min-h-[6.25rem] sm:px-4"
+                  style={{
+                    background:
+                      'linear-gradient(180deg, rgba(168,85,247,0.45) 0%, rgba(91,33,182,0.55) 100%)',
+                    boxShadow:
+                      'inset 0 0 0 1px rgba(168,85,247,0.7), 0 8px 20px -10px rgba(168,85,247,0.45)',
+                  }}
+                >
+                  <RotateCcw className="h-5 w-5 shrink-0 sm:h-6 sm:w-6" />
+                  새 게임
+                </button>
+              </div>
+            )}
+
+            {lexioModalView === 'rules' && (
+              <div className="lexio-rules-scroll min-h-0 flex-1 space-y-4 overflow-y-auto p-5 text-slate-100 sm:p-6">
               <section className="lexio-rule-section">
-                <h3 className="text-xs tracking-[0.3em] uppercase text-purple-300/80 mb-3">
+                <h3 className="mb-3 text-xs uppercase tracking-[0.3em] text-purple-300/80">
                   게임 개요
                 </h3>
-                <p className="text-purple-100/85 leading-relaxed text-sm">
+                <p className="text-sm leading-relaxed text-purple-100/85">
                   렉시오는 5명이 즐기는 한국식 셰딩(Shedding) 게임입니다.
                   각 플레이어는 12장의 타일을 받으며,
                   손에 든 타일을 가장 먼저 모두 내려놓는 사람이 승리합니다.
@@ -723,10 +792,10 @@ export default function Lexio() {
               </section>
 
               <section className="lexio-rule-section">
-                <h3 className="text-xs tracking-[0.3em] uppercase text-purple-300/80 mb-3">
+                <h3 className="mb-3 text-xs uppercase tracking-[0.3em] text-purple-300/80">
                   타일 구성
                 </h3>
-                <ul className="text-purple-100/85 text-sm space-y-1.5 list-disc list-inside">
+                <ul className="list-inside list-disc space-y-1.5 text-sm text-purple-100/85">
                   <li>총 60장: 1~15 숫자 × 4색(녹/청/황/홍)</li>
                   <li>
                     <strong>숫자 강도</strong>(약 → 강): 3 &lt; 4 &lt; ... &lt;
@@ -739,52 +808,184 @@ export default function Lexio() {
                     <span style={{ color: COLOR_HEX.green }}>녹</span> &lt;{' '}
                     <span style={{ color: COLOR_HEX.red }}>홍</span>
                   </li>
-                  <li>가장 약한 타일은 <strong>3-청</strong>, 가장 강한 타일은 <strong>2-홍</strong>입니다.</li>
+                  <li>
+                    가장 약한 패는 <strong>{LOWEST_TILE_LABEL}</strong>, 가장 강한
+                    패는 <strong>홍2</strong>입니다.
+                  </li>
                 </ul>
               </section>
 
               <section className="lexio-rule-section">
-                <h3 className="text-xs tracking-[0.3em] uppercase text-purple-300/80 mb-3">
+                <h3 className="mb-3 text-xs uppercase tracking-[0.3em] text-purple-300/80">
                   조합 종류
                 </h3>
-                <ul className="text-purple-100/85 text-sm space-y-1.5 list-disc list-inside">
-                  <li><strong>싱글</strong>: 타일 1장</li>
-                  <li><strong>페어</strong>: 같은 숫자 2장</li>
-                  <li><strong>트리플</strong>: 같은 숫자 3장</li>
-                  <li><strong>스트레이트</strong>: 5장 연속 숫자(강도 기준 연속)</li>
-                  <li><strong>플러시</strong>: 같은 색 5장</li>
-                  <li><strong>풀하우스</strong>: 트리플 + 페어</li>
-                  <li><strong>포카드</strong>: 같은 숫자 4장 + 아무 1장</li>
-                  <li><strong>스트레이트 플러시</strong>: 같은 색 연속 5장</li>
+                <ul className="list-inside list-disc space-y-1.5 text-sm text-purple-100/85">
+                  <li>
+                    <strong>싱글</strong>: 타일 1장
+                  </li>
+                  <li>
+                    <strong>페어</strong>: 같은 숫자 2장
+                  </li>
+                  <li>
+                    <strong>트리플</strong>: 같은 숫자 3장
+                  </li>
+                  <li>
+                    <strong>스트레이트</strong>: 5장 연속 숫자(강도 기준 연속)
+                  </li>
+                  <li>
+                    <strong>플러시</strong>: 같은 색 5장
+                  </li>
+                  <li>
+                    <strong>풀하우스</strong>: 트리플 + 페어
+                  </li>
+                  <li>
+                    <strong>포카드</strong>: 같은 숫자 4장 + 아무 1장
+                  </li>
+                  <li>
+                    <strong>스트레이트 플러시</strong>: 같은 색 연속 5장
+                  </li>
                 </ul>
-                <p className="text-purple-100/70 leading-relaxed text-xs mt-3">
+                <p className="mt-3 text-xs leading-relaxed text-purple-100/70">
                   5장 조합 강도: 스트레이트 &lt; 플러시 &lt; 풀하우스 &lt;
                   포카드 &lt; 스트레이트 플러시
                 </p>
               </section>
 
               <section className="lexio-rule-section">
-                <h3 className="text-xs tracking-[0.3em] uppercase text-purple-300/80 mb-3">
+                <h3 className="mb-3 text-xs uppercase tracking-[0.3em] text-purple-300/80">
                   진행 방식
                 </h3>
-                <ul className="text-purple-100/85 text-sm space-y-1.5 list-disc list-inside">
-                  <li>가장 약한 타일(3-청 등)을 가진 사람이 첫 라운드를 시작합니다.</li>
-                  <li>첫 트릭에서는 반드시 가장 약한 타일을 포함해서 내야 합니다.</li>
+                <ul className="list-inside list-disc space-y-1.5 text-sm text-purple-100/85">
+                  <li>
+                    <strong>{LOWEST_TILE_LABEL}</strong>을 손에 든 사람이 첫
+                    라운드를 시작합니다.
+                  </li>
                   <li>이후 같은 장수의 더 강한 조합을 내거나 패스합니다.</li>
                   <li>1, 2, 3장 조합은 같은 종류끼리만 비교합니다.</li>
                   <li>5장 조합은 종류가 달라도 강도에 따라 이길 수 있습니다.</li>
-                  <li>나머지 모두가 패스하면 마지막에 낸 사람이 새 트릭을 리드합니다.</li>
+                  <li>
+                    나머지 모두가 패스하면 마지막에 낸 사람이 새 트릭을 리드합니다.
+                  </li>
                   <li>가장 먼저 손에 든 타일을 모두 내려놓으면 승리!</li>
                 </ul>
               </section>
+
+              <section className="lexio-rule-section">
+                <h3 className="mb-3 text-xs uppercase tracking-[0.3em] text-purple-300/80">
+                  세션 · 코인
+                </h3>
+                <ul className="list-inside list-disc space-y-1.5 text-sm text-purple-100/85">
+                  <li>시작할 때 최대 20판까지 몇 판 할지 정합니다.</li>
+                  <li>
+                    한 판이 끝날 때마다, 각자 손에 남은 타일 수만큼 코인을
+                    얻습니다.
+                  </li>
+                  <li>
+                    그때 손에 <strong>2</strong> 숫자 타일이 하나라도 있으면
+                    그 사람의 그 판 코인이 2배입니다.
+                  </li>
+                </ul>
+              </section>
             </div>
+            )}
+
+            {lexioModalView === 'newGame' && (
+            <div
+              className="shrink-0 space-y-3 border-t p-5 backdrop-blur-md sm:p-6"
+              style={{
+                borderColor: 'rgba(168,85,247,0.25)',
+                background:
+                  'linear-gradient(0deg, rgba(10,10,35,0.98) 0%, rgba(30,27,75,0.92) 100%)',
+              }}
+            >
+              {phase === 'playing' ? (
+                <>
+                  <p className="text-center text-sm leading-relaxed text-purple-100/80">
+                    정말로 새 게임을 시작하시겠습니까?
+                    <br />
+                    <span className="text-purple-100/50">
+                      진행 중인 판·세션 코인이 초기화되며 처음 화면으로
+                      돌아갑니다.
+                    </span>
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={closeLexioMenu}
+                      className="flex-1 rounded-full px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-200 transition-all hover:-translate-y-0.5"
+                      style={{
+                        background: 'rgba(255,255,255,0.04)',
+                        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.15)',
+                      }}
+                    >
+                      취소
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        closeLexioMenu();
+                        resetSessionToSetup();
+                      }}
+                      className="flex-1 rounded-full px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-purple-100 transition-all hover:-translate-y-0.5"
+                      style={{
+                        background:
+                          'linear-gradient(180deg, rgba(168,85,247,0.4) 0%, rgba(91,33,182,0.5) 100%)',
+                        boxShadow:
+                          'inset 0 0 0 1px rgba(168,85,247,0.65), 0 8px 20px -10px rgba(168,85,247,0.5)',
+                      }}
+                    >
+                      확인
+                    </button>
+                  </div>
+                </>
+              ) : phase === 'setup' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeLexioMenu();
+                    beginNewSessionFromSetup();
+                  }}
+                  className="w-full rounded-full px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-purple-100 transition-all hover:-translate-y-0.5"
+                  style={{
+                    background:
+                      'linear-gradient(180deg, rgba(168,85,247,0.4) 0%, rgba(91,33,182,0.5) 100%)',
+                    boxShadow:
+                      'inset 0 0 0 1px rgba(168,85,247,0.65), 0 8px 20px -10px rgba(168,85,247,0.5)',
+                  }}
+                >
+                  게임 시작
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeLexioMenu();
+                    resetSessionToSetup();
+                  }}
+                  className="w-full rounded-full px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-200 transition-all hover:-translate-y-0.5"
+                  style={{
+                    background: 'rgba(255,255,255,0.06)',
+                    boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18)',
+                  }}
+                >
+                  처음 화면으로
+                </button>
+              )}
+            </div>
+            )}
           </div>
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
+      <div className={isTableView ? '' : 'max-w-7xl mx-auto'}>
+        {/* Header — 테이블 뷰에서는 캔버스 위 오버레이 */}
+        <div
+          className={`flex items-center justify-between pointer-events-auto ${
+            isTableView
+              ? 'fixed top-0 left-0 right-0 z-20 px-4 py-3 bg-gradient-to-b from-[#0a0a23]/95 to-transparent'
+              : 'mb-4'
+          }`}
+        >
           <Link
             to="/"
             className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs tracking-[0.3em] uppercase font-semibold text-purple-100 transition-all hover:-translate-y-0.5"
@@ -800,37 +1001,31 @@ export default function Lexio() {
             <p className="text-[10px] tracking-[0.5em] text-purple-300/70 uppercase">
               Lexio
             </p>
-            <h1 className="text-3xl font-serif tracking-wider text-purple-100">
+            <h1 className="text-2xl sm:text-3xl font-serif tracking-wider text-purple-100">
               렉 시 오
             </h1>
+            {isTableView && (
+              <p className="mt-1 text-[11px] tracking-wide text-purple-200/80">
+                코인 {humanSessionCoins} · {sessionCompletedRounds}/
+                {sessionTotalRounds}판
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             <button
-              onClick={() => setShowRules(true)}
-              className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs tracking-[0.3em] uppercase font-semibold text-purple-100 transition-all hover:-translate-y-0.5"
-              style={{
-                background: 'rgba(255,255,255,0.05)',
-                boxShadow: 'inset 0 0 0 1px rgba(168,85,247,0.4)',
-              }}
-            >
-              <BookOpen className="w-4 h-4" />
-              규칙
-            </button>
-            <button
-              onClick={() => {
-                if (phase === 'setup' || phase === 'finished') startGame();
-                else setShowNewGameConfirm(true);
-              }}
-              className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs tracking-[0.3em] uppercase font-semibold text-purple-100 transition-all hover:-translate-y-0.5"
+              type="button"
+              onClick={openLexioOptions}
+              className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs tracking-[0.25em] font-semibold text-purple-100 transition-all hover:-translate-y-0.5 sm:px-4"
               style={{
                 background:
-                  'linear-gradient(180deg, rgba(168,85,247,0.4) 0%, rgba(91,33,182,0.5) 100%)',
+                  'linear-gradient(180deg, rgba(168,85,247,0.35) 0%, rgba(91,33,182,0.45) 100%)',
                 boxShadow:
-                  'inset 0 0 0 1px rgba(168,85,247,0.65), 0 8px 20px -10px rgba(168,85,247,0.5)',
+                  'inset 0 0 0 1px rgba(168,85,247,0.55), 0 8px 20px -10px rgba(168,85,247,0.45)',
               }}
+              aria-label="옵션"
             >
-              <RotateCcw className="w-4 h-4" />
-              새 게임
+              <Settings className="h-4 w-4 shrink-0 sm:h-[18px] sm:w-[18px]" />
+              <span className="hidden sm:inline">옵션</span>
             </button>
           </div>
         </div>
@@ -853,13 +1048,46 @@ export default function Lexio() {
               <h2 className="text-2xl font-serif tracking-wide text-purple-100 mb-3">
                 렉시오에 오신 것을 환영합니다
               </h2>
-              <p className="text-purple-100/70 text-sm mb-8 leading-relaxed">
+              <p className="text-purple-100/70 text-sm mb-6 leading-relaxed">
                 4명의 AI 상대와 함께 즐기는 5인 한국식 셰딩 게임.
                 <br />
                 각자 12장의 타일을 받아 가장 먼저 손패를 모두 비우면 승리합니다.
+                <br />
+                <span className="text-purple-300/90">
+                  플레이 중에는 3D 테이블 1인칭 시점으로 진행됩니다.
+                </span>
               </p>
+              <div className="mb-8 text-left">
+                <label
+                  htmlFor="lexio-session-rounds"
+                  className="mb-2 block text-xs font-medium tracking-wide text-purple-200/90"
+                >
+                  이번 세션 총 판 수 (최대 {MAX_SESSION_ROUNDS}판)
+                </label>
+                <div className="flex items-center gap-4">
+                  <input
+                    id="lexio-session-rounds"
+                    type="range"
+                    min={1}
+                    max={MAX_SESSION_ROUNDS}
+                    value={pendingSessionRounds}
+                    onChange={(e) =>
+                      setPendingSessionRounds(Number(e.target.value))
+                    }
+                    className="min-w-0 flex-1 accent-purple-400"
+                  />
+                  <span className="w-10 shrink-0 text-right font-mono text-sm text-purple-100">
+                    {pendingSessionRounds}
+                  </span>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-purple-300/70">
+                  한 판이 끝날 때마다 남은 패 수만큼 모든 플레이어가 코인을
+                  얻습니다. 손에 숫자 2가 있으면 그 판 코인이 2배입니다.
+                </p>
+              </div>
               <button
-                onClick={startGame}
+                type="button"
+                onClick={beginNewSessionFromSetup}
                 className="rounded-full px-8 py-3 text-xs tracking-[0.4em] uppercase font-bold text-purple-100 transition-all hover:-translate-y-0.5"
                 style={{
                   background:
@@ -874,283 +1102,169 @@ export default function Lexio() {
           </div>
         )}
 
-        {/* Playing / Finished */}
+        {/* Playing / Finished — 전체 화면 3D 1인칭 테이블 */}
         {(phase === 'playing' || phase === 'finished') && (
-          <div
-            className="relative rounded-3xl p-6"
-            style={{
-              background:
-                'radial-gradient(ellipse at center, rgba(76,29,149,0.45) 0%, rgba(30,27,75,0.5) 60%, rgba(10,10,35,0.7) 100%)',
-              boxShadow:
-                'inset 0 0 0 1px rgba(168,85,247,0.3), 0 20px 60px -20px rgba(0,0,0,0.7)',
-              minHeight: '720px',
-            }}
-          >
-            {/* Top row: 4 AI players */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
-              {aiPlayers.map((ai) => (
-                <PlayerCard
-                  key={ai.id}
-                  player={ai}
-                  isActive={currentPlayerIdx === players.indexOf(ai)}
-                  position="top"
-                />
-              ))}
+          <div className="relative h-[100dvh] w-full overflow-hidden">
+            <div className="absolute inset-0 z-0">
+              <LexioFirstPersonScene
+                players={players}
+                currentPlayerIdx={currentPlayerIdx}
+                humanPlayer={humanPlayer}
+                currentPlay={currentPlay}
+                selectedIds={selectedIds}
+                onToggleTile={toggleSelect}
+                phase={phase}
+                discardPlacements={discardPlacements}
+                finishTableUi={finishTableUi}
+              />
             </div>
 
-            {/* Center play area */}
-            <div className="flex justify-center mb-5">
-              <div
-                className="rounded-2xl px-6 py-5 min-w-[340px] max-w-2xl w-full"
-                style={{
-                  background:
-                    'linear-gradient(180deg, rgba(15,12,40,0.7) 0%, rgba(8,7,25,0.8) 100%)',
-                  boxShadow:
-                    'inset 0 0 0 1px rgba(168,85,247,0.3), 0 12px 30px -10px rgba(0,0,0,0.6)',
-                }}
-              >
-                <p className="text-center text-[10px] tracking-[0.4em] text-purple-300/70 uppercase mb-3">
-                  Current Play
-                </p>
-                {currentPlay ? (
-                  <>
-                    <div className="flex justify-center gap-1.5 flex-wrap mb-3">
-                      {currentPlay.tiles.map((t) => (
-                        <Tile key={t.id} tile={t} highlight />
-                      ))}
+            {/* 모바일: 현재 패 카드 */}
+            {currentPlay && (
+              <div className="pointer-events-none absolute left-0 right-0 top-[4.5rem] z-10 flex justify-center px-3 sm:hidden">
+                <div className="pointer-events-auto flex max-w-full gap-1 overflow-x-auto rounded-xl border border-purple-500/25 bg-[#0a0a23]/85 px-2 py-1.5 backdrop-blur-md">
+                  {currentPlay.tiles.map((t) => (
+                    <div key={t.id} className="shrink-0">
+                      <LexioPlayCard
+                        number={t.number}
+                        suit={lexioColorToSuit(t.color)}
+                        small
+                      />
                     </div>
-                    <p className="text-center text-purple-100/90 text-xs">
-                      <span className="font-semibold text-purple-200">
-                        {lastPlayedByIdx !== null
-                          ? players[lastPlayedByIdx]?.name
-                          : ''}
-                      </span>
-                      {' · '}
-                      <span className="text-purple-300/80">
-                        {comboKorean(currentPlay.type)}
-                      </span>
-                    </p>
-                  </>
-                ) : (
-                  <div className="text-center text-purple-100/40 text-xs tracking-[0.3em] uppercase py-8">
-                    {phase === 'finished' ? 'Game Over' : 'Lead the trick'}
-                  </div>
-                )}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Message */}
-            <div className="text-center mb-5">
-              <p
-                className="inline-block rounded-full px-5 py-2 text-xs tracking-wider text-purple-100"
-                style={{
-                  background: 'rgba(168,85,247,0.12)',
-                  boxShadow: 'inset 0 0 0 1px rgba(168,85,247,0.35)',
-                }}
-              >
-                {message}
-              </p>
-            </div>
+            {/* HUD: 중앙 메시지 — 사용자 액션 가이드/에러가 있을 때만 표시 */}
+            {message && (
+              <div className="pointer-events-none absolute left-0 right-0 top-20 z-10 flex justify-center px-4">
+                <p
+                  className="pointer-events-none max-w-xl rounded-full px-5 py-2 text-center text-xs tracking-wider text-purple-100 shadow-lg sm:text-sm"
+                  style={{
+                    background: 'rgba(10,10,35,0.72)',
+                    boxShadow:
+                      'inset 0 0 0 1px rgba(168,85,247,0.35), 0 8px 32px rgba(0,0,0,0.45)',
+                  }}
+                >
+                  {message}
+                </p>
+              </div>
+            )}
 
-            {/* Human player area */}
+            {/* 하단 조작 — 손패는 3D에서 클릭 */}
             {humanPlayer && (
               <div
-                className="rounded-2xl p-5"
-                style={{
-                  background:
-                    'linear-gradient(180deg, rgba(15,12,40,0.8) 0%, rgba(8,7,25,0.92) 100%)',
-                  boxShadow: isHumanTurn
-                    ? 'inset 0 0 0 1px rgba(168,85,247,0.65), 0 0 30px -2px rgba(168,85,247,0.4)'
-                    : 'inset 0 0 0 1px rgba(168,85,247,0.25)',
-                }}
+                className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-[#0a0a23]/95 via-[#0a0a23]/55 to-transparent px-4 pb-6 pt-16"
               >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-purple-300" />
-                    <span className="text-purple-100 font-semibold text-sm">
-                      {humanPlayer.name}
-                    </span>
-                    <span className="text-purple-300/70 text-xs">
+                <div className="pointer-events-none mx-auto flex max-w-2xl flex-col items-center gap-3">
+                  <div className="flex flex-wrap items-center justify-center gap-2 text-xs text-purple-200/90">
+                    <Users className="h-3.5 w-3.5 text-purple-300" />
+                    <span className="font-semibold">{humanPlayer.name}</span>
+                    <span className="text-purple-300/75">
                       ({humanPlayer.hand.length}장)
                     </span>
-                    {isHumanTurn && (
+                    {isHumanTurn && phase === 'playing' && (
                       <span
-                        className="ml-2 text-[10px] tracking-[0.3em] uppercase px-2 py-0.5 rounded-full"
+                        className="ml-1 rounded-full px-2 py-0.5 text-[10px] tracking-[0.25em] uppercase"
                         style={{
                           background:
                             'linear-gradient(180deg, rgba(168,85,247,0.5) 0%, rgba(91,33,182,0.6) 100%)',
                           boxShadow: 'inset 0 0 0 1px rgba(168,85,247,0.8)',
                         }}
                       >
-                        Your Turn
+                        당신 차례
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-purple-200/80">
-                    {selectedTiles.length > 0 && selectedCombo && (
-                      <span>
-                        선택: <strong>{comboKorean(selectedCombo.type)}</strong>{' '}
-                        ({selectedTiles.length}장)
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    {phase === 'playing' && selectedTiles.length > 0 && selectedCombo && (
+                      <span className="rounded-full bg-purple-500/20 px-3 py-1 text-xs text-purple-100">
+                        선택: {comboKorean(selectedCombo.type)} (
+                        {selectedTiles.length}장)
                       </span>
                     )}
-                    {selectedTiles.length > 0 && !selectedCombo && (
-                      <span className="text-rose-300/80">
+                    {phase === 'playing' && selectedTiles.length > 0 && !selectedCombo && (
+                      <span className="rounded-full bg-rose-500/20 px-3 py-1 text-xs text-rose-200">
                         유효하지 않은 조합
                       </span>
                     )}
                   </div>
-                </div>
-
-                <div className="flex gap-1.5 flex-wrap justify-center mb-4 min-h-[5rem]">
-                  {humanPlayer.hand.map((t) => (
-                    <Tile
-                      key={t.id}
-                      tile={t}
-                      selected={selectedIds.includes(t.id)}
-                      onClick={
-                        phase === 'playing'
-                          ? () => toggleSelect(t.id)
-                          : undefined
-                      }
-                    />
-                  ))}
-                </div>
-
-                <div className="flex items-center justify-center gap-3">
-                  <button
-                    onClick={() => setSelectedIds([])}
-                    disabled={!isHumanTurn || selectedIds.length === 0}
-                    className="rounded-full px-5 py-2 text-xs tracking-[0.3em] uppercase font-semibold text-slate-200 transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-                    style={{
-                      background: 'rgba(255,255,255,0.05)',
-                      boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18)',
-                    }}
-                  >
-                    선택 취소
-                  </button>
-                  <button
-                    onClick={handleHumanPass}
-                    disabled={!isHumanTurn || !currentPlay}
-                    className="rounded-full px-6 py-2 text-xs tracking-[0.3em] uppercase font-semibold text-rose-100 transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-                    style={{
-                      background:
-                        'linear-gradient(180deg, rgba(159,18,57,0.4) 0%, rgba(76,5,25,0.55) 100%)',
-                      boxShadow:
-                        'inset 0 0 0 1px rgba(244,63,94,0.55), 0 8px 20px -10px rgba(244,63,94,0.4)',
-                    }}
-                  >
-                    패스
-                  </button>
-                  <button
-                    onClick={handleHumanPlay}
-                    disabled={!canHumanPlay}
-                    className="rounded-full px-8 py-2 text-xs tracking-[0.3em] uppercase font-bold text-purple-100 transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-                    style={{
-                      background:
-                        'linear-gradient(180deg, rgba(168,85,247,0.5) 0%, rgba(91,33,182,0.6) 100%)',
-                      boxShadow:
-                        'inset 0 0 0 1px rgba(168,85,247,0.8), 0 10px 24px -8px rgba(168,85,247,0.55)',
-                    }}
-                  >
-                    내기
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Winner overlay */}
-            {phase === 'finished' && winnerId !== null && (
-              <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-md rounded-3xl">
-                <div
-                  className="rounded-2xl p-8 max-w-md w-full text-center"
-                  style={{
-                    background:
-                      'linear-gradient(180deg, #1e1b4b 0%, #0a0a23 100%)',
-                    boxShadow:
-                      '0 0 0 1px rgba(168,85,247,0.45), 0 30px 60px -20px rgba(0,0,0,0.8)',
-                  }}
-                >
-                  <p className="text-[10px] tracking-[0.4em] text-purple-300/80 uppercase mb-2">
-                    Game Over
-                  </p>
-                  <h2 className="text-3xl font-serif tracking-wide text-purple-100 mb-2">
-                    {winnerId === humanPlayer?.id ? '🎉 승리!' : '패배'}
-                  </h2>
-                  <p className="text-purple-100/80 mb-7 text-sm">
-                    {players.find((p) => p.id === winnerId)?.name}이(가) 모든
-                    타일을 내려놓았습니다.
-                  </p>
-                  <button
-                    onClick={startGame}
-                    className="rounded-full px-8 py-3 text-xs tracking-[0.4em] uppercase font-bold text-purple-100"
-                    style={{
-                      background:
-                        'linear-gradient(180deg, rgba(168,85,247,0.5) 0%, rgba(91,33,182,0.6) 100%)',
-                      boxShadow:
-                        'inset 0 0 0 1px rgba(168,85,247,0.8), 0 10px 30px -8px rgba(168,85,247,0.6)',
-                    }}
-                  >
-                    한 판 더
-                  </button>
+                  {phase === 'finished' ? (
+                    <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-3">
+                      {sessionHasNextHand ? (
+                        <button
+                          type="button"
+                          onClick={dealNewHand}
+                          className="rounded-full px-10 py-2.5 text-xs font-bold tracking-[0.25em] text-purple-100 transition-all hover:-translate-y-0.5"
+                          style={{
+                            background:
+                              'linear-gradient(180deg, rgba(168,85,247,0.5) 0%, rgba(91,33,182,0.6) 100%)',
+                            boxShadow:
+                              'inset 0 0 0 1px rgba(168,85,247,0.8), 0 10px 24px -8px rgba(168,85,247,0.55)',
+                          }}
+                        >
+                          계속하기
+                          <span className="ml-2.5 font-mono text-[10px] font-semibold tracking-normal text-purple-200/90">
+                            Enter
+                          </span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={resetSessionToSetup}
+                          className="rounded-full px-10 py-2.5 text-xs font-bold tracking-[0.25em] text-slate-100 transition-all hover:-translate-y-0.5"
+                          style={{
+                            background: 'rgba(255,255,255,0.08)',
+                            boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.22)',
+                          }}
+                        >
+                          처음으로
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-3">
+                      {isHumanTurn && phase === 'playing' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleHumanPass}
+                            disabled={!currentPlay}
+                            className="rounded-full px-6 py-2 text-xs tracking-[0.3em] font-semibold uppercase text-rose-100 transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
+                            style={{
+                              background:
+                                'linear-gradient(180deg, rgba(159,18,57,0.4) 0%, rgba(76,5,25,0.55) 100%)',
+                              boxShadow:
+                                'inset 0 0 0 1px rgba(244,63,94,0.55), 0 8px 20px -10px rgba(244,63,94,0.4)',
+                            }}
+                          >
+                            패스
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleHumanPlay}
+                            disabled={!canHumanPlay}
+                            className="rounded-full px-8 py-2 text-xs tracking-[0.3em] font-bold uppercase text-purple-100 transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
+                            style={{
+                              background:
+                                'linear-gradient(180deg, rgba(168,85,247,0.5) 0%, rgba(91,33,182,0.6) 100%)',
+                              boxShadow:
+                                'inset 0 0 0 1px rgba(168,85,247,0.8), 0 10px 24px -8px rgba(168,85,247,0.55)',
+                            }}
+                          >
+                            내기
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function PlayerCard({
-  player,
-  isActive,
-  position,
-}: {
-  player: UiPlayer;
-  isActive: boolean;
-  position: 'top' | 'left' | 'right';
-}) {
-  const showCount = Math.min(player.hand.length, 15);
-  return (
-    <div
-      className={`rounded-2xl px-4 py-3 min-w-[180px] transition-all duration-300 ${
-        position === 'top' ? '' : ''
-      } ${player.passed ? 'opacity-70' : ''}`}
-      style={{
-        background:
-          'linear-gradient(180deg, rgba(15,12,40,0.85) 0%, rgba(8,7,25,0.92) 100%)',
-        boxShadow: isActive
-          ? '0 0 0 1px rgba(168,85,247,0.85), 0 0 26px -2px rgba(168,85,247,0.55), 0 10px 30px -10px rgba(0,0,0,0.7)'
-          : 'inset 0 0 0 1px rgba(168,85,247,0.25), 0 8px 22px -10px rgba(0,0,0,0.6)',
-      }}
-    >
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <Users className="w-3.5 h-3.5 text-purple-300/80 shrink-0" />
-          <span className="text-purple-100 text-xs font-semibold tracking-wide truncate">
-            {player.name}
-          </span>
-        </div>
-        <span className="text-[10px] tracking-wide text-purple-300/80">
-          {player.hand.length}장
-        </span>
-      </div>
-      <div className="flex flex-wrap gap-0.5 justify-center">
-        {Array.from({ length: showCount }).map((_, i) => (
-          <TileBack key={i} small />
-        ))}
-        {player.hand.length === 0 && (
-          <span className="text-[10px] tracking-[0.3em] uppercase text-purple-300/60 py-2">
-            손패 없음
-          </span>
-        )}
-      </div>
-      {player.passed && (
-        <p className="text-[10px] tracking-[0.3em] uppercase text-rose-300/80 text-center mt-2">
-          Pass
-        </p>
-      )}
     </div>
   );
 }

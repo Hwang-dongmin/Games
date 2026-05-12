@@ -276,33 +276,47 @@ export function enumerateCombos(
 }
 
 // AI: 현재 트릭을 이길 수 있는 가장 약한 조합 반환, 없으면 null
-// target === null 이면 리드 차례 (가장 약한 단일 또는 의무 타일 포함 조합)
+// target === null 이면 리드:
+//   큰 조합(페어/트리플/5장 풀하우스·플러시 등)을 적극적으로 활용하도록 확률 가중을 둠.
 export function aiFindMove(
   hand: LexioTile[],
   target: LexioCombination | null,
-  mustIncludeLowest: boolean = false,
 ): LexioTile[] | null {
   if (hand.length === 0) return null;
   const sorted = sortHand(hand);
 
   if (!target) {
-    // 리드: 가장 약한 단일 카드부터 시작 (간단한 전략)
-    if (mustIncludeLowest) {
-      // 첫 트릭은 최약 타일을 포함해야 함 → 가장 낮은 단일 카드 리드
-      return [sorted[0]];
+    const singles = enumerateCombos(sorted, 1).sort((a, b) => a.value - b.value);
+    const pairs = enumerateCombos(sorted, 2).sort((a, b) => a.value - b.value);
+    const triples = enumerateCombos(sorted, 3).sort((a, b) => a.value - b.value);
+    const fives = enumerateCombos(sorted, 5).sort((a, b) => a.value - b.value);
+
+    // 큰 조합부터 확률 기반으로 우선 사용.
+    //  - 5장(풀하우스/플러시/스트레이트 등) ≈ 35%
+    //  - 트리플 ≈ 55%
+    //  - 페어 ≈ 65%
+    //  - 그 외(=단일) fallback
+    if (fives.length > 0 && Math.random() < 0.35) {
+      return fives[0].tiles;
     }
-    return [sorted[0]];
+    if (triples.length > 0 && Math.random() < 0.55) {
+      return triples[0].tiles;
+    }
+    if (pairs.length > 0 && Math.random() < 0.65) {
+      return pairs[0].tiles;
+    }
+
+    // fallback: 가장 약한 단일 → 없으면 더 큰 조합 순서로
+    if (singles.length > 0) return singles[0].tiles;
+    if (pairs.length > 0) return pairs[0].tiles;
+    if (triples.length > 0) return triples[0].tiles;
+    if (fives.length > 0) return fives[0].tiles;
+    return null;
   }
 
   const size = target.tiles.length;
   const candidates = enumerateCombos(sorted, size);
-  let valid = candidates.filter((c) => beats(c, target));
-
-  if (mustIncludeLowest) {
-    const lowestId = sorted[0].id;
-    valid = valid.filter((c) => c.tiles.some((t) => t.id === lowestId));
-    if (valid.length === 0) return null;
-  }
+  const valid = candidates.filter((c) => beats(c, target));
 
   if (valid.length === 0) return null;
   valid.sort((a, b) => a.value - b.value);
@@ -342,4 +356,16 @@ export function hasLowestTile(
     }
   });
   return allPlayers[lowestPlayerIdx]?.id === player.id;
+}
+
+/** 판 종료 시 손패 기준 코인: 남은 장수 × (숫자 2 보유 시 2배) */
+export function roundCoinForHand(hand: LexioTile[]): {
+  earned: number;
+  doubled: boolean;
+} {
+  const remaining = hand.length;
+  const hasTwo = hand.some((t) => t.number === 2);
+  const doubled = hasTwo && remaining > 0;
+  const earned = remaining * (hasTwo ? 2 : 1);
+  return { earned, doubled };
 }
