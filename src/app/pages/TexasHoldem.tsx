@@ -13,6 +13,50 @@ import {
   getRandomPersonality,
 } from '../utils/poker';
 
+/** 금액·팟·베팅 옆에 쓰는 코인(칩) 마크 — 단색 동그라미 대신 사용 */
+function HoldemCoinIcon({ className = 'h-4 w-4' }: { className?: string }) {
+  const gid = React.useId().replace(/[^a-zA-Z0-9]/g, '');
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden
+    >
+      <defs>
+        <linearGradient id={`${gid}-face`} x1="4" y1="3" x2="20" y2="21" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#fffbeb" />
+          <stop offset="0.4" stopColor="#fbbf24" />
+          <stop offset="1" stopColor="#92400e" />
+        </linearGradient>
+      </defs>
+      <circle cx="12" cy="12" r="10" fill={`url(#${gid}-face)`} stroke="#451a03" strokeWidth="1.15" />
+      <circle
+        cx="12"
+        cy="12"
+        r="9.35"
+        fill="none"
+        stroke="#fef3c7"
+        strokeOpacity="0.55"
+        strokeWidth="0.5"
+        strokeDasharray="1.15 0.9"
+      />
+      <circle cx="12" cy="12" r="6.35" fill="none" stroke="#292524" strokeOpacity="0.28" strokeWidth="0.7" />
+      <text
+        x="12"
+        y="14.2"
+        textAnchor="middle"
+        fill="#292524"
+        fillOpacity={0.88}
+        style={{ fontSize: '10px', fontFamily: 'ui-serif, Georgia, serif', fontWeight: 700 }}
+      >
+        $
+      </text>
+    </svg>
+  );
+}
+
 type GamePhase = 'betting' | 'pre-flop' | 'flop' | 'turn' | 'river' | 'showdown' | 'game-over' | 'setup';
 type RoundHistoryEntry = {
   round: number;
@@ -47,6 +91,7 @@ type PersistedTexasHoldemState = {
   blindTimeLeft: number;
   roundNumber: number;
   roundHistory: RoundHistoryEntry[];
+  lastActions: Record<number, string>;
 };
 
 const INITIAL_CHIPS = 1000;
@@ -97,6 +142,7 @@ export default function TexasHoldem() {
   const [roundNumber, setRoundNumber] = useState(0);
   const [roundHistory, setRoundHistory] = useState<RoundHistoryEntry[]>([]);
   const [selectedRound, setSelectedRound] = useState<RoundHistoryEntry | null>(null);
+  const [lastActions, setLastActions] = useState<Record<number, string>>({});
   const [hasHydrated, setHasHydrated] = useState(false);
 
   // 게임 초기화
@@ -135,6 +181,7 @@ export default function TexasHoldem() {
     setBlindTimeLeft(BLIND_INCREASE_INTERVAL);
     setRoundNumber(0);
     setRoundHistory([]);
+    setLastActions({});
   };
 
   const startSetup = () => {
@@ -146,6 +193,7 @@ export default function TexasHoldem() {
     setBlindTimeLeft(BLIND_INCREASE_INTERVAL);
     setRoundNumber(0);
     setRoundHistory([]);
+    setLastActions({});
   };
 
   // 새 라운드 시작
@@ -167,18 +215,27 @@ export default function TexasHoldem() {
     setRoundNumber(prev => prev + 1);
 
     // 블라인드 설정
-    const newDealerIndex = (dealerIndex + 1) % activePlayers.length;
-    const sbIndex = (newDealerIndex + 1) % activePlayers.length;
-    const bbIndex = (newDealerIndex + 2) % activePlayers.length;
+    const currentDealerActiveIndex = activePlayers.findIndex(p => p.id === players[dealerIndex]?.id);
+    const newDealerActiveIndex =
+      ((currentDealerActiveIndex >= 0 ? currentDealerActiveIndex : -1) + 1) % activePlayers.length;
+    const sbActiveIndex = (newDealerActiveIndex + 1) % activePlayers.length;
+    const bbActiveIndex = (newDealerActiveIndex + 2) % activePlayers.length;
 
-    const updatedPlayers = players.map((p, idx) => {
-      if (p.chips <= 0) return { ...p, folded: true, currentBet: 0, cards: [] };
+    const updatedPlayers = players.map(p => {
+      // 탈락(칩 0): 블라인드·홀카드 없음 — 덱도 소모하지 않음
+      if (p.chips <= 0) {
+        return { ...p, folded: true, currentBet: 0, cards: [] };
+      }
 
       const activeIdx = activePlayers.findIndex(ap => ap.id === p.id);
       let bet = 0;
 
-      if (activeIdx === sbIndex) bet = Math.min(currentSmallBlind, p.chips);
-      if (activeIdx === bbIndex) bet = Math.min(currentBigBlind, p.chips);
+      if (activeIdx >= 0 && activeIdx === sbActiveIndex) {
+        bet = Math.min(currentSmallBlind, p.chips);
+      }
+      if (activeIdx >= 0 && activeIdx === bbActiveIndex) {
+        bet = Math.min(currentBigBlind, p.chips);
+      }
 
       return {
         ...p,
@@ -192,17 +249,22 @@ export default function TexasHoldem() {
     setDeck(newDeck);
     setPlayers(updatedPlayers);
     setCommunityCards([]);
-    setPot(activePlayers[sbIndex].currentBet + activePlayers[bbIndex].currentBet);
+    const roundPot = updatedPlayers.reduce((sum, p) => sum + p.currentBet, 0);
+    setPot(roundPot);
     setCurrentBet(currentBigBlind);
     setGamePhase('pre-flop');
-    const preflopStartIndex = (newDealerIndex + 3) % activePlayers.length;
-    setCurrentPlayerIndex(preflopStartIndex);
-    setBettingRoundStartIndex(preflopStartIndex);
+    const preflopStarterId = activePlayers[(newDealerActiveIndex + 3) % activePlayers.length].id;
+    const preflopStartIndex = updatedPlayers.findIndex(p => p.id === preflopStarterId);
+    const dealerPlayerId = activePlayers[newDealerActiveIndex].id;
+    const newDealerIndexInPlayers = updatedPlayers.findIndex(p => p.id === dealerPlayerId);
+    setCurrentPlayerIndex(Math.max(0, preflopStartIndex));
+    setBettingRoundStartIndex(Math.max(0, preflopStartIndex));
     setActedPlayerIds(new Set());
-    setDealerIndex(newDealerIndex);
+    setDealerIndex(Math.max(0, newDealerIndexInPlayers));
     setMessage('프리플랍: 베팅을 시작하세요.');
     setRaiseAmount(currentBigBlind * 2);
     setShowCards(false);
+    setLastActions({});
   };
 
   // 플레이어 액션
@@ -216,15 +278,18 @@ export default function TexasHoldem() {
     const currentPlayer = updatedPlayers[currentPlayerIndex];
     let newCurrentBet = currentBet;
     let raisedThisAction = false;
+    let actionLabel = '';
 
     if (action === 'fold') {
       currentPlayer.folded = true;
+      actionLabel = '폴드';
       setMessage(`${currentPlayer.name}이(가) 폴드했습니다.`);
     } else if (action === 'call') {
       const callAmount = Math.min(currentBet - currentPlayer.currentBet, currentPlayer.chips);
       currentPlayer.chips -= callAmount;
       currentPlayer.currentBet += callAmount;
       setPot(prev => prev + callAmount);
+      actionLabel = callAmount === 0 ? '체크' : `콜 ${callAmount}`;
       setMessage(
         callAmount === 0
           ? `${currentPlayer.name}이(가) 체크했습니다.`
@@ -239,7 +304,11 @@ export default function TexasHoldem() {
       newCurrentBet = raiseTotal;
       setCurrentBet(raiseTotal);
       raisedThisAction = true;
+      actionLabel = `레이즈 ${raiseTotal}`;
       setMessage(`${currentPlayer.name}이(가) ${raiseTotal}로 레이즈했습니다.`);
+    }
+    if (actionLabel) {
+      setLastActions(prev => ({ ...prev, [currentPlayer.id]: actionLabel }));
     }
 
     // 이번 페이즈에서 액션한 플레이어 셋 갱신
@@ -337,6 +406,7 @@ export default function TexasHoldem() {
     setCurrentPlayerIndex(nextRoundStartIndex);
     setBettingRoundStartIndex(nextRoundStartIndex);
     setActedPlayerIds(new Set());
+    setLastActions({});
   };
 
   // 라운드 종료
@@ -483,6 +553,7 @@ export default function TexasHoldem() {
       setBlindTimeLeft(saved.blindTimeLeft ?? BLIND_INCREASE_INTERVAL);
       setRoundNumber(saved.roundNumber ?? 0);
       setRoundHistory(saved.roundHistory ?? []);
+      setLastActions(saved.lastActions ?? {});
     } catch {
       window.localStorage.removeItem(HOLDEM_STORAGE_KEY);
     } finally {
@@ -513,6 +584,7 @@ export default function TexasHoldem() {
       blindTimeLeft,
       roundNumber,
       roundHistory,
+      lastActions,
     };
     window.localStorage.setItem(HOLDEM_STORAGE_KEY, JSON.stringify(toSave));
   }, [
@@ -536,10 +608,19 @@ export default function TexasHoldem() {
     blindTimeLeft,
     roundNumber,
     roundHistory,
+    lastActions,
   ]);
 
   useEffect(() => {
-    if (gamePhase === 'setup' || gamePhase === 'game-over') return;
+    // 쇼다운 대기·게임 전 대기 등에서는 블라인드 레벨만 올라가지 않게 정지
+    if (
+      gamePhase === 'setup' ||
+      gamePhase === 'game-over' ||
+      gamePhase === 'showdown' ||
+      gamePhase === 'betting'
+    ) {
+      return;
+    }
 
     const timer = setInterval(() => {
       setBlindTimeLeft(prev => {
@@ -584,9 +665,10 @@ export default function TexasHoldem() {
   const totalPlayers = players.length;
   const dealerSeatIndex = totalPlayers > 0 ? dealerIndex % totalPlayers : 0;
   const dealerAngle = totalPlayers > 0 ? (dealerSeatIndex / totalPlayers) * Math.PI * 2 + Math.PI / 2 : 0;
+  // 홀카드(좌석에서 안쪽 ~42/37)와 겹치지 않게, 좌석(56/51) 쪽으로 더 밀어 둠
   const dealerButtonPosition = {
-    left: `${50 + 43 * Math.cos(dealerAngle)}%`,
-    top: `${50 + 37 * Math.sin(dealerAngle)}%`,
+    left: `${50 + 51 * Math.cos(dealerAngle)}%`,
+    top: `${50 + 46 * Math.sin(dealerAngle)}%`,
   };
 
   useEffect(() => {
@@ -1019,8 +1101,11 @@ export default function TexasHoldem() {
                 <h3 className="text-lg font-serif text-amber-100">
                   R{selectedRound.round} · {selectedRound.result === 'split' ? '무승부' : `승자 ${selectedRound.winner}`}
                 </h3>
-                <p className="text-xs text-emerald-100/75 mt-0.5">
-                  Pot {selectedRound.pot.toLocaleString()} {selectedRound.hand ? `· ${selectedRound.hand}` : ''}
+                <p className="text-xs text-emerald-100/75 mt-0.5 inline-flex items-center gap-1.5 flex-wrap">
+                  <HoldemCoinIcon className="h-3.5 w-3.5 shrink-0 opacity-90" />
+                  <span>
+                    Pot {selectedRound.pot.toLocaleString()} {selectedRound.hand ? `· ${selectedRound.hand}` : ''}
+                  </span>
                 </p>
               </div>
               <button
@@ -1264,7 +1349,7 @@ export default function TexasHoldem() {
                 <div className="absolute top-[28%] left-1/2 -translate-x-1/2 flex flex-col items-center gap-3 z-10">
                   {/* Pot Display */}
                   <div
-                    className="relative px-5 py-1.5 rounded-full text-[11px] tracking-[0.3em] uppercase font-semibold"
+                    className="relative inline-flex items-center gap-2 px-5 py-1.5 rounded-full text-[11px] tracking-[0.3em] uppercase font-semibold"
                     style={{
                       background:
                         'linear-gradient(180deg, #fde68a 0%, #f59e0b 55%, #b45309 100%)',
@@ -1273,7 +1358,8 @@ export default function TexasHoldem() {
                         '0 8px 20px -8px rgba(245,158,11,0.7), inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -1px 0 rgba(0,0,0,0.25)',
                     }}
                   >
-                    Pot · {pot.toLocaleString()}
+                    <HoldemCoinIcon className="h-[1.05rem] w-[1.05rem] shrink-0 drop-shadow-sm" />
+                    <span>Pot · {pot.toLocaleString()}</span>
                   </div>
 
                   {/* Cards */}
@@ -1354,7 +1440,9 @@ export default function TexasHoldem() {
                   const radiusY = 51;
                   const x = 50 + radiusX * Math.cos(angle);
                   const y = 50 + radiusY * Math.sin(angle);
-                  const isActive = idx === currentPlayerIndex && !player.folded;
+                  const isOut = player.chips <= 0;
+                  const isActive =
+                    idx === currentPlayerIndex && !player.folded && !isOut;
 
                   return (
                     <div
@@ -1368,41 +1456,52 @@ export default function TexasHoldem() {
                       <div
                         className={`relative px-1 py-1 transition-all duration-300 ${
                           isActive ? 'scale-[1.04]' : ''
-                        } ${player.folded ? 'opacity-55 grayscale' : ''}`}
+                        } ${isOut ? '' : player.folded ? 'opacity-55 grayscale' : ''}`}
                       >
-                        {/* Player Info */}
-                        <div className="flex items-center justify-center gap-1.5 mb-0.5">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <Users className="w-3 h-3 text-amber-300/80 shrink-0" />
-                            <span className="text-slate-100 text-sm font-semibold tracking-wide truncate">
-                              {player.name}
-                            </span>
+                        <div className={isOut ? 'opacity-[0.48] grayscale' : ''}>
+                          {/* Player Info */}
+                          <div className="flex items-center justify-center gap-1.5 mb-0.5">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <Users className="w-3 h-3 text-amber-300/80 shrink-0" />
+                              <span className="text-slate-100 text-sm font-semibold tracking-wide truncate">
+                                {player.name}
+                              </span>
+                            </div>
+                          </div>
+                          {player.isAI && player.personality && (
+                            <div className="text-[9px] tracking-[0.18em] uppercase text-amber-200/60 text-center mb-1">
+                              {player.personality.label}
+                            </div>
+                          )}
+                          {lastActions[player.id] && (
+                            <div className="text-[9px] tracking-[0.18em] uppercase text-sky-200/80 text-center mb-1">
+                              {lastActions[player.id]}
+                            </div>
+                          )}
+
+                          {/* Chips */}
+                          <div className="flex items-center justify-center mb-0.5 pl-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <HoldemCoinIcon className="h-3.5 w-3.5 shrink-0 opacity-95" />
+                              <span className="text-amber-100/90 text-sm font-mono tabular-nums">
+                                {player.chips.toLocaleString()}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                        {player.isAI && player.personality && (
-                          <div className="text-[9px] tracking-[0.18em] uppercase text-amber-200/60 text-center mb-1">
-                            {player.personality.label}
+
+                        {isOut && (
+                          <div
+                            className="pointer-events-none absolute inset-0 flex items-center justify-center"
+                            aria-label={`${player.name} 탈락`}
+                          >
+                            <span
+                              className="-rotate-[11deg] select-none rounded-sm border-[2.5px] border-dashed border-rose-400/80 bg-rose-950/45 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.28em] text-rose-100/95 shadow-[0_1px_0_rgba(255,255,255,0.1)_inset,0_2px_5px_rgba(0,0,0,0.4)] ring-1 ring-black/30"
+                            >
+                              OUT
+                            </span>
                           </div>
                         )}
-
-                        {/* Chips */}
-                        <div className="flex items-center justify-center mb-0.5 pl-0.5">
-                          <div className="flex items-center gap-1.5">
-                            <span
-                              className="inline-block w-2.5 h-2.5 rounded-full"
-                              style={{
-                                background:
-                                  'radial-gradient(circle at 30% 30%, #fde68a, #b45309 70%)',
-                                boxShadow:
-                                  'inset 0 0 0 1px rgba(0,0,0,0.4)',
-                              }}
-                            />
-                            <span className="text-amber-100/90 text-sm font-mono tabular-nums">
-                              {player.chips.toLocaleString()}
-                            </span>
-                          </div>
-                        </div>
-
                       </div>
                     </div>
                   );
@@ -1418,6 +1517,9 @@ export default function TexasHoldem() {
                   const cardOffset = 14;
                   const cardX = x - cardOffset * Math.cos(angle);
                   const cardY = y - cardOffset * Math.sin(angle);
+                  const isOut = player.chips <= 0;
+                  if (isOut && player.cards.length === 0) return null;
+
                   const isRedCard = (suit: string) => suit === '♥' || suit === '♦';
                   const canShowHandHint =
                     !player.folded &&
@@ -1439,7 +1541,7 @@ export default function TexasHoldem() {
                   return (
                     <div
                       key={`cards-${player.id}`}
-                      className="absolute -translate-x-1/2 -translate-y-1/2 z-10"
+                      className="absolute -translate-x-1/2 -translate-y-1/2 z-[25]"
                       style={{
                         left: `${cardX}%`,
                         top: `${cardY}%`,
@@ -1502,7 +1604,7 @@ export default function TexasHoldem() {
                             </div>
                           );
                         })}
-                        {player.folded && (
+                        {player.folded && player.chips > 0 && (
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                             <span className="px-2 py-0.5 rounded-sm border border-rose-200/80 bg-rose-950/55 text-rose-100/95 text-[10px] font-black tracking-[0.32em] uppercase shadow-[0_0_0_1px_rgba(0,0,0,0.25),0_6px_12px_rgba(0,0,0,0.35)]">
                               Fold
@@ -1521,10 +1623,37 @@ export default function TexasHoldem() {
                   );
                 })}
 
+                {/* Bet amounts on table */}
+                {players.map((player, idx) => {
+                  if (player.currentBet <= 0 || player.folded) return null;
+                  const angle = (idx / totalPlayers) * Math.PI * 2 + Math.PI / 2;
+                  const x = 50 + 56 * Math.cos(angle);
+                  const y = 50 + 51 * Math.sin(angle);
+                  const betX = x - 21 * Math.cos(angle);
+                  const betY = y - 21 * Math.sin(angle);
+                  return (
+                    <div
+                      key={`bet-${player.id}`}
+                      className="absolute -translate-x-1/2 -translate-y-1/2 z-[12] flex items-center gap-1.5 px-2 py-1 rounded-full"
+                      style={{
+                        left: `${betX}%`,
+                        top: `${betY}%`,
+                        background: 'rgba(3, 7, 6, 0.7)',
+                        boxShadow: 'inset 0 0 0 1px rgba(245,158,11,0.3)',
+                      }}
+                    >
+                      <HoldemCoinIcon className="h-3 w-3 shrink-0 opacity-95" />
+                      <span className="text-[10px] text-amber-100/90 font-mono tabular-nums">
+                        {player.currentBet}
+                      </span>
+                    </div>
+                  );
+                })}
+
                 {/* Dealer / Blind button on table */}
                 {players.length > 0 && (
                   <div
-                    className="absolute -translate-x-1/2 -translate-y-1/2 z-20 transition-all duration-700 ease-in-out"
+                    className="absolute -translate-x-1/2 -translate-y-1/2 z-[11] transition-all duration-700 ease-in-out"
                     style={dealerButtonPosition}
                   >
                     <div
@@ -1799,8 +1928,9 @@ export default function TexasHoldem() {
                     {entry.result === 'split' ? `무승부 · ${entry.winner}` : `승자 ${entry.winner}`}
                     {entry.hand ? ` (${entry.hand})` : ''}
                   </span>
-                  <span className="text-emerald-200/80 text-right font-mono">
-                    Pot {entry.pot.toLocaleString()}
+                  <span className="text-emerald-200/80 text-right font-mono inline-flex items-center justify-end gap-1">
+                    <HoldemCoinIcon className="h-3 w-3 shrink-0 opacity-90" />
+                    <span>Pot {entry.pot.toLocaleString()}</span>
                   </span>
                 </button>
               ))}
