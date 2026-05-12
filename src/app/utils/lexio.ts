@@ -1,7 +1,7 @@
 // 렉시오(Lexio) 게임 로직
-// 60장 타일: 1~15 × 4색(녹/청/황/홍)
+// 60장 타일: 1~15 × 4색(초/파/노/빨)
 // 숫자 강도: 3(약) < 4 < ... < 15 < 1 < 2(강)
-// 색상 강도: 청(약) < 황 < 녹 < 홍(강)
+// 색상 강도: 파(약) < 노 < 초 < 빨(강)
 
 export type LexioColor = 'green' | 'blue' | 'yellow' | 'red';
 
@@ -44,10 +44,10 @@ const COLOR_RANK: Record<LexioColor, number> = {
 };
 
 export const COLOR_KOREAN: Record<LexioColor, string> = {
-  green: '녹',
-  blue: '청',
-  yellow: '황',
-  red: '홍',
+  green: '초',
+  blue: '파',
+  yellow: '노',
+  red: '빨',
 };
 
 export const COLOR_HEX: Record<LexioColor, string> = {

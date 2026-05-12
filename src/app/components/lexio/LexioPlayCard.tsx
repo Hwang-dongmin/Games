@@ -34,7 +34,7 @@ const SUIT_CONFIG: Record<
     label: string;
     iconClass: string;
     glyphClass: string;
-    /** 큰 숫자 — 카드 본인 색(홍·녹·황·청 대응) */
+    /** 큰 숫자 — 카드 본인 색(빨·초·노·파 대응) */
     numberClass: string;
   }
 > = {
@@ -76,7 +76,7 @@ const SUIT_CONFIG: Record<
   },
 };
 
-/** 렉시오 색 → 문양 (홍·녹·황·청) */
+/** 렉시오 색 → 문양 (빨·초·노·파) */
 export function lexioColorToSuit(color: LexioColor): LexioPlaySuit {
   const map: Record<LexioColor, LexioPlaySuit> = {
     red: 'sun',
@@ -92,6 +92,8 @@ type LexioPlayCardProps = {
   suit: LexioPlaySuit;
   className?: string;
   small?: boolean;
+  /** 규칙 모달 등: small일 때 세로만 아주 약간 축소 */
+  rulesTight?: boolean;
   /** 3D 등에서 메시 호버와 동기화할 때 true */
   isHovered?: boolean;
   /** 판 종료 공개 시 숫자 2 패 후광 */
@@ -107,13 +109,17 @@ export function LexioPlayCard({
   suit,
   className = '',
   small = false,
+  rulesTight = false,
   isHovered = false,
   numberTwoHalo = false,
 }: LexioPlayCardProps) {
   const { Icon, glyph, label, iconClass, glyphClass, numberClass } =
     SUIT_CONFIG[suit];
+  const tight = small && rulesTight;
   const numCls = small
-    ? 'text-xl font-black tabular-nums tracking-tight'
+    ? tight
+      ? 'text-[18px] font-black tabular-nums tracking-tight'
+      : 'text-xl font-black tabular-nums tracking-tight'
     : 'text-3xl font-black tabular-nums tracking-tight';
 
   const hoverLift =
@@ -134,8 +140,12 @@ export function LexioPlayCard({
         'bg-neutral-950',
         'border border-neutral-800/90',
         'shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-2px_0_rgba(0,0,0,0.45),0_2px_0_rgba(0,0,0,0.55),0_6px_14px_-4px_rgba(0,0,0,0.75)]',
-        'aspect-[57/89]',
-        small ? 'w-[3.1rem] px-1.5 py-1' : 'w-[4rem] px-2 py-1.5',
+        tight ? 'aspect-[57/79]' : 'aspect-[57/89]',
+        small
+          ? tight
+            ? 'w-[3.1rem] px-1.5 py-1.5'
+            : 'w-[3.1rem] px-1.5 py-1'
+          : 'w-[4rem] px-2 py-1.5',
         hoverLift,
         isHovered ? forcedHover : hoverCss,
         twoHalo,
@@ -159,7 +169,11 @@ export function LexioPlayCard({
       <div className="relative z-[1] flex items-end justify-between gap-0.5">
         <Icon
           className={[
-            small ? 'h-4 w-4 shrink-0' : 'h-5 w-5 shrink-0',
+            small
+              ? tight
+                ? 'h-3.5 w-3.5 shrink-0'
+                : 'h-4 w-4 shrink-0'
+              : 'h-5 w-5 shrink-0',
             iconClass,
           ].join(' ')}
           strokeWidth={2.25}
@@ -169,7 +183,11 @@ export function LexioPlayCard({
           <span
             className={[
               'block leading-none',
-              small ? 'text-[13px]' : 'text-base',
+              small
+                ? tight
+                  ? 'text-[12px]'
+                  : 'text-[13px]'
+                : 'text-base',
               glyphClass,
             ].join(' ')}
             style={{ fontFamily: HIERO_FONT }}
