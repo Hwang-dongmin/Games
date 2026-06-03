@@ -3,6 +3,47 @@ import type { LexioColor } from '../../utils/lexio';
 
 export type LexioPlaySuit = 'sun' | 'moon' | 'star' | 'cloud';
 
+/** 3D 패 앞면 — 상형문자·색상·워터마크 아이콘 */
+export const LEXIO_SUIT_FACE = {
+  sun: {
+    color: '#ef4444',
+    glow: '#fca5a5',
+    accent: '#f87171',
+    glyph: '\u{131F3}',
+    label: '\u{13080}',
+    mark: '☀',
+    /** 바탕 큰 무늬 — Noto Sans 기호 */
+    watermark: '☀',
+  },
+  moon: {
+    color: '#10b981',
+    glow: '#6ee7b7',
+    accent: '#34d399',
+    glyph: '\u{131F9}',
+    label: '\u{131FD}',
+    mark: '☽',
+    watermark: '☽',
+  },
+  star: {
+    color: '#fbbf24',
+    glow: '#fde68a',
+    accent: '#fcd34d',
+    glyph: '\u{131FC}',
+    label: '\u{131FB}',
+    mark: '★',
+    watermark: '★',
+  },
+  cloud: {
+    color: '#3b82f6',
+    glow: '#93c5fd',
+    accent: '#60a5fa',
+    glyph: '\u{131EF}',
+    label: '\u{13217}',
+    mark: '☁',
+    watermark: '☁',
+  },
+} as const;
+
 /** 이집트 상형문자 (Unicode Egyptian Hieroglyphs) — 해·달·별·하늘/물안개 */
 const H = {
   /** N005 태양 원반 */

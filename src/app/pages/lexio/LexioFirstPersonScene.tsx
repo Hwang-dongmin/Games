@@ -19,6 +19,7 @@ import {
   LexioPlayCard,
   lexioColorToSuit,
 } from '../../components/lexio/LexioPlayCard';
+import { LexioPlayCardFace3D } from '../../components/lexio/LexioPlayCardFace3D';
 
 export type LexioDiscardPlacement = {
   key: string;
@@ -80,6 +81,13 @@ const _axisY = new THREE.Vector3(0, 1, 0);
 const HOVER_LIFT = 0.088;
 const SELECT_LIFT = 0.168;
 
+/** 손패·테이블 돌 — roughness 낮춰 매끈한 윗면 하이라이트 */
+const TILE_STONE_MAT = {
+  color: '#131118',
+  metalness: 0.16,
+  roughness: 0.5,
+} as const;
+
 /** 돌 패 모서리 — ExtrudeGeometry + 라운딩 실루엣 */
 const tileRoundedGeomCache = new Map<string, THREE.BufferGeometry>();
 
@@ -91,9 +99,9 @@ function getRoundedTileGeometry(
   const hw = width / 2;
   const hh = height / 2;
   const cr = Math.min(
-    Math.min(width, height) * 0.068,
-    hw * 0.42,
-    hh * 0.42,
+    Math.min(width, height) * 0.1,
+    hw * 0.44,
+    hh * 0.36,
   );
   const key = `${width.toFixed(6)}_${height.toFixed(6)}_${depth.toFixed(6)}_${cr.toFixed(6)}`;
   const cached = tileRoundedGeomCache.get(key);
@@ -110,11 +118,17 @@ function getRoundedTileGeometry(
   shape.lineTo(-hw, -hh + cr);
   shape.absarc(-hw + cr, -hh + cr, cr, Math.PI, Math.PI * 1.5, false);
 
+  const bevelTh = Math.min(depth * 0.09, cr * 0.5);
+  const bevelSz = Math.min(cr * 0.38, depth * 0.075);
+
   const geom = new THREE.ExtrudeGeometry(shape, {
     depth,
-    bevelEnabled: false,
+    bevelEnabled: bevelTh > 0.002,
+    bevelThickness: bevelTh,
+    bevelSize: bevelSz,
+    bevelSegments: 4,
     steps: 1,
-    curveSegments: 14,
+    curveSegments: 20,
   });
   geom.computeVertexNormals();
   geom.center();
@@ -145,6 +159,9 @@ const TILE_HTML_Z_RANGE: Record<
   front: [320, 220],
 };
 
+const TILE_FACE_W = TILE_W * 0.92;
+const TILE_FACE_H = TILE_H * 0.92;
+
 function LexioTile3D({
   tile,
   position,
@@ -155,6 +172,7 @@ function LexioTile3D({
   facePointerHover = true,
   finishReveal = false,
   rowLayer = 'single',
+  faceMode = 'html',
 }: {
   tile: LexioTile;
   position: [number, number, number];
@@ -168,6 +186,8 @@ function LexioTile3D({
   finishReveal?: boolean;
   /** 손패 2줄일 때 앞·뒤 가림 순서 */
   rowLayer?: 'back' | 'single' | 'front';
+  /** mesh: WebGL plane 앞면(depth 정렬) / html: DOM Html 오버레이 */
+  faceMode?: 'html' | 'mesh';
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const liftSmoothed = useRef(0);
@@ -203,6 +223,8 @@ function LexioTile3D({
 
   const meshOrder = TILE_RENDER_ORDER[rowLayer];
   const htmlZRange = TILE_HTML_Z_RANGE[rowLayer];
+  const useMeshFace = faceMode === 'mesh';
+  const suit = lexioColorToSuit(tile.color);
 
   const setHover = (next: boolean) => {
     setHovered(next);
@@ -241,18 +263,29 @@ function LexioTile3D({
         renderOrder={meshOrder}
       >
         <meshStandardMaterial
-          color="#16151a"
-          metalness={0.04}
-          roughness={0.9}
+          color={TILE_STONE_MAT.color}
+          metalness={TILE_STONE_MAT.metalness}
+          roughness={TILE_STONE_MAT.roughness}
           emissive="#000000"
           emissiveIntensity={0}
           opacity={dimmed ? 0.55 : 1}
           transparent={dimmed}
         />
       </mesh>
-      {showFaceHover && !interactive && (
+      {showFaceHover &&
+        (useMeshFace
+          ? interactive
+          : !interactive) && (
         <mesh
           position={[0, 0, FACE_Z + 0.012]}
+          onClick={
+            interactive
+              ? (e) => {
+                  e.stopPropagation();
+                  onClick?.();
+                }
+              : undefined
+          }
           onPointerOver={(e) => {
             e.stopPropagation();
             setHover(true);
@@ -266,6 +299,19 @@ function LexioTile3D({
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
       )}
+      {useMeshFace ? (
+        <group position={[0, 0, FACE_Z + 0.008]}>
+          <LexioPlayCardFace3D
+            number={tile.number}
+            suit={suit}
+            width={TILE_FACE_W}
+            height={TILE_FACE_H}
+            isHovered={cardHovered}
+            numberTwoHalo={numberTwoHalo}
+            renderOrder={meshOrder + 1}
+          />
+        </group>
+      ) : (
       <Html
         transform
         center
@@ -282,7 +328,7 @@ function LexioTile3D({
           <div className="relative w-[3.1rem]">
             <LexioPlayCard
               number={tile.number}
-              suit={lexioColorToSuit(tile.color)}
+              suit={suit}
               small
               embed3D
               isHovered={cardHovered}
@@ -311,7 +357,7 @@ function LexioTile3D({
           <div className="pointer-events-none [&_*]:pointer-events-none">
             <LexioPlayCard
               number={tile.number}
-              suit={lexioColorToSuit(tile.color)}
+              suit={suit}
               small
               embed3D
               isHovered={cardHovered}
@@ -320,6 +366,7 @@ function LexioTile3D({
           </div>
         )}
       </Html>
+      )}
     </group>
   );
 }
@@ -880,6 +927,7 @@ function HandRow3D({
         rotation={[0, 0, 0]}
         selected={selected}
         rowLayer={p.rowLayer}
+        faceMode="mesh"
         onClick={enabled ? () => onToggle(p.tile.id) : undefined}
       />
     );
@@ -970,11 +1018,14 @@ function SceneContent({
       <color attach="background" args={['#0a0a23']} />
       <fog attach="fog" args={['#0a0a23', 12, 28]} />
 
-      <ambientLight intensity={0.4} />
+      <ambientLight intensity={0.2} />
+      <hemisphereLight args={['#a89fd4', '#0c0a18', 0.22]} />
+      {/** 키 라이트 — 테이블·손패 돌 윗면 하이라이트 */}
       <directionalLight
         castShadow
-        position={[4, 10, 6]}
-        intensity={1.1}
+        position={[0.6, 16, 3.2]}
+        intensity={1.65}
+        color="#fff6eb"
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
         shadow-camera-far={30}
@@ -982,8 +1033,19 @@ function SceneContent({
         shadow-camera-right={8}
         shadow-camera-top={8}
         shadow-camera-bottom={-8}
-      />
-      <pointLight position={[0, 3.2, 1.5]} intensity={0.5} color="#e9d5ff" />
+        shadow-bias={-0.00012}
+      >
+        <object3D attach="target" position={[0, TABLE_TOP_Y, 0.8]} />
+      </directionalLight>
+      {/** 손패 쪽 보조 — 위에서 부드럽게 채움 */}
+      <directionalLight
+        position={[0, 12, 1.8]}
+        intensity={0.42}
+        color="#ede9fe"
+      >
+        <object3D attach="target" position={[0, TILE_CENTER_Y, 1.5]} />
+      </directionalLight>
+      <pointLight position={[0, 5.5, 3.2]} intensity={0.14} color="#c4b5fd" />
 
       <TableRoom />
       <DiscardPile3D placements={discardPlacements} />
@@ -1036,8 +1098,6 @@ function SceneContent({
         blur={2.5}
         far={2}
       />
-
-      <hemisphereLight args={['#312e81', '#0f172a', 0.4]} />
     </>
   );
 }
