@@ -71,6 +71,394 @@
   opacity: 1;
 }
 
+/* Lexio Online — welcome overlay */
+@keyframes lexioWelcomeOverlayIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+  }
+}
+
+@keyframes lexioWelcomeOverlayOut {
+  from {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+  }
+  to {
+    opacity: 0;
+    backdrop-filter: blur(0);
+  }
+}
+
+@keyframes lexioWelcomeCardIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.82) translateY(28px);
+    filter: blur(10px);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.03) translateY(-4px);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes lexioWelcomeCardOut {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.08) translateY(-16px);
+    filter: blur(12px);
+  }
+}
+
+@keyframes lexioWelcomeOrbFloat {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.45;
+  }
+  33% {
+    transform: translate(12px, -18px) scale(1.08);
+    opacity: 0.7;
+  }
+  66% {
+    transform: translate(-10px, 14px) scale(0.94);
+    opacity: 0.55;
+  }
+}
+
+@keyframes lexioWelcomeParticleDrift {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.4);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-72px) scale(1);
+  }
+}
+
+@keyframes lexioWelcomeSubtitleIn {
+  from {
+    opacity: 0;
+    letter-spacing: 0.15em;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    letter-spacing: 0.5em;
+    transform: translateY(0);
+  }
+}
+
+@keyframes lexioWelcomeTitleIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes lexioWelcomeTitleShimmer {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+@keyframes lexioWelcomeLineExpand {
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+@keyframes lexioWelcomeBorderPulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes lexioWelcomeShimmerSweep {
+  0% {
+    transform: translateX(-120%) skewX(-18deg);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateX(220%) skewX(-18deg);
+    opacity: 0;
+  }
+}
+
+@keyframes lexioWelcomeVignettePulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.lexio-welcome-overlay {
+  background: rgba(10, 10, 35, 0.62);
+  animation: lexioWelcomeOverlayIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.lexio-welcome-overlay.lexio-welcome-leaving {
+  animation: lexioWelcomeOverlayOut 0.65s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.lexio-welcome-overlay.lexio-welcome-leaving .lexio-welcome-card {
+  animation: lexioWelcomeCardOut 0.65s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.lexio-welcome-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 45%, rgba(124, 58, 237, 0.22), transparent 68%),
+    radial-gradient(circle at 50% 50%, transparent 35%, rgba(10, 10, 35, 0.75) 100%);
+  animation: lexioWelcomeVignettePulse 4s ease-in-out infinite;
+}
+
+.lexio-welcome-orbs {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.lexio-welcome-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(40px);
+  animation: lexioWelcomeOrbFloat 7s ease-in-out infinite;
+}
+
+.lexio-welcome-orb-a {
+  top: 18%;
+  left: 22%;
+  width: 180px;
+  height: 180px;
+  background: rgba(168, 85, 247, 0.35);
+}
+
+.lexio-welcome-orb-b {
+  top: 52%;
+  right: 18%;
+  width: 220px;
+  height: 220px;
+  background: rgba(79, 70, 229, 0.28);
+  animation-delay: -2.4s;
+  animation-duration: 8.5s;
+}
+
+.lexio-welcome-orb-c {
+  bottom: 14%;
+  left: 38%;
+  width: 140px;
+  height: 140px;
+  background: rgba(236, 72, 153, 0.18);
+  animation-delay: -4.1s;
+  animation-duration: 6.5s;
+}
+
+.lexio-welcome-particles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.lexio-welcome-particle {
+  position: absolute;
+  bottom: -8%;
+  left: calc(8% + (var(--particle-i) * 4.8%));
+  width: 3px;
+  height: 3px;
+  border-radius: 9999px;
+  background: rgba(233, 213, 255, 0.95);
+  box-shadow: 0 0 8px rgba(196, 181, 253, 0.9);
+  animation: lexioWelcomeParticleDrift 3.6s ease-out infinite;
+  animation-delay: calc(var(--particle-i) * 0.22s);
+}
+
+.lexio-welcome-card {
+  position: relative;
+  max-width: 28rem;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 1.25rem;
+  padding: 2.75rem 2.25rem;
+  text-align: center;
+  animation: lexioWelcomeCardIn 1s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(168, 85, 247, 0.28), transparent 42%),
+    radial-gradient(circle at 88% 100%, rgba(99, 102, 241, 0.2), transparent 38%),
+    linear-gradient(180deg, rgba(30, 27, 75, 0.92) 0%, rgba(10, 10, 35, 0.96) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(216, 180, 254, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 32px 64px -24px rgba(0, 0, 0, 0.85),
+    0 0 80px -20px rgba(124, 58, 237, 0.45);
+}
+
+.lexio-welcome-card-ring {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 1px solid rgba(196, 181, 253, 0.25);
+  animation: lexioWelcomeBorderPulse 2.8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.lexio-welcome-card-glow {
+  position: absolute;
+  inset: -40%;
+  background: conic-gradient(
+    from 0deg,
+    transparent,
+    rgba(168, 85, 247, 0.12),
+    transparent,
+    rgba(129, 140, 248, 0.1),
+    transparent
+  );
+  animation: spin 12s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.lexio-welcome-inner {
+  position: relative;
+  z-index: 1;
+}
+
+.lexio-welcome-line {
+  display: block;
+  height: 1px;
+  margin-inline: auto;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(196, 181, 253, 0.85) 50%,
+    transparent
+  );
+  transform-origin: center;
+}
+
+.lexio-welcome-line-top {
+  width: 72%;
+  margin-bottom: 1.25rem;
+  animation: lexioWelcomeLineExpand 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.45s both;
+}
+
+.lexio-welcome-line-bottom {
+  width: 48%;
+  margin-top: 1.35rem;
+  animation: lexioWelcomeLineExpand 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.85s both;
+}
+
+.lexio-welcome-subtitle {
+  margin: 0;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: rgba(216, 180, 254, 0.88);
+  animation: lexioWelcomeSubtitleIn 1.1s cubic-bezier(0.22, 1, 0.36, 1) 0.35s both;
+}
+
+@media (min-width: 640px) {
+  .lexio-welcome-subtitle {
+    font-size: 0.8rem;
+  }
+}
+
+.lexio-welcome-title {
+  margin: 0.65rem 0 0;
+}
+
+.lexio-welcome-title-text {
+  display: inline-block;
+  font-family: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+  font-size: 1.65rem;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  color: transparent;
+  background: linear-gradient(
+    105deg,
+    #f5f3ff 0%,
+    #e9d5ff 22%,
+    #ffffff 45%,
+    #c4b5fd 68%,
+    #f5f3ff 100%
+  );
+  background-size: 220% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation:
+    lexioWelcomeTitleIn 1s cubic-bezier(0.22, 1, 0.36, 1) 0.55s both,
+    lexioWelcomeTitleShimmer 4.5s linear 1.6s infinite;
+}
+
+@media (min-width: 640px) {
+  .lexio-welcome-title-text {
+    font-size: 2rem;
+  }
+}
+
+.lexio-welcome-shimmer {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.14) 50%,
+    transparent 65%
+  );
+  animation: lexioWelcomeShimmerSweep 3.2s ease-in-out 1.2s infinite;
+  pointer-events: none;
+}
+
 .lexio-rules-panel {
   position: relative;
 }

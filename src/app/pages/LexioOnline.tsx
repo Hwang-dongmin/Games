@@ -24,7 +24,8 @@ import {
   SelectValue,
 } from '../components/ui/select';
 import LexioFirstPersonScene from './lexio/LexioFirstPersonScene';
-import { beats, comboKorean, detectCombo } from '../utils/lexio';
+import LexioOnlineWelcomeOverlay from './lexio/LexioOnlineWelcomeOverlay';
+import { beats, comboKorean, detectCombo, aiFindMove, sortHand } from '../utils/lexio';
 import {
   buildOnlineFinishTableUi,
   clientViewToPlayers,
@@ -37,6 +38,7 @@ import {
   MAX_ONLINE_PLAYERS,
   MAX_SESSION_ROUNDS,
   MIN_ONLINE_PLAYERS,
+  replacePlayerWithAI,
   startNewRound,
   type ClientGameView,
   type LexioGameState,
@@ -62,6 +64,13 @@ type Screen = 'entry' | 'lobby' | 'game';
 const DEFAULT_NICK = () =>
   `플레이어${Math.floor(100 + Math.random() * 900)}`;
 
+function playerLeftMessage(nickname: string, replacedByAi: boolean): string {
+  if (replacedByAi) {
+    return `${nickname}님이 나갔습니다. 지금부터 AI가 플레이합니다.`;
+  }
+  return `${nickname}님이 나갔습니다.`;
+}
+
 export default function LexioOnline() {
   const [searchParams] = useSearchParams();
   const roomFromUrl = searchParams.get('room')?.trim() ?? '';
@@ -82,6 +91,7 @@ export default function LexioOnline() {
   });
   const [gameView, setGameView] = useState<ClientGameView | null>(null);
   const [gameIntroDone, setGameIntroDone] = useState(false);
+  const [welcomeLeaving, setWelcomeLeaving] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
@@ -115,6 +125,7 @@ export default function LexioOnline() {
     const host = hostRef.current;
     if (!host) return;
     for (const p of state.players) {
+      if (p.isAI) continue;
       const view = buildClientView(state, p.peerId);
       if (view) host.sendTo(p.peerId, { type: 'game', view });
     }
@@ -227,7 +238,9 @@ export default function LexioOnline() {
         setScreen('entry');
         break;
       case 'player_left':
-        showTransientStatus(`${msg.nickname}님이 나갔습니다.`);
+        showTransientStatus(
+          playerLeftMessage(msg.nickname, msg.replacedByAi ?? false),
+        );
         break;
       default:
         break;
@@ -237,24 +250,43 @@ export default function LexioOnline() {
   const handleGuestDisconnected = useCallback(
     (peerId: string) => {
       const leaving = lobbyPlayersRef.current.find((p) => p.peerId === peerId);
-      const next = lobbyPlayersRef.current.filter((p) => p.peerId !== peerId);
+      const nextLobby = lobbyPlayersRef.current.filter(
+        (p) => p.peerId !== peerId,
+      );
+      const gs = gameStateRef.current;
+      const replacedByAi = Boolean(
+        leaving && gs && gs.phase === 'playing' && gs.players.some(
+          (p) => p.peerId === peerId,
+        ),
+      );
 
       if (leaving) {
-        showTransientStatus(`${leaving.nickname}님이 나갔습니다.`);
+        showTransientStatus(
+          playerLeftMessage(leaving.nickname, replacedByAi),
+        );
         hostRef.current?.broadcast({
           type: 'player_left',
           nickname: leaving.nickname,
+          replacedByAi,
         });
+      }
+
+      if (replacedByAi && gs) {
+        const replaced = replacePlayerWithAI(gs, peerId);
+        if (replaced) {
+          gameStateRef.current = replaced.state;
+          broadcastGame(replaced.state);
+        }
       }
 
       hostRef.current?.broadcast({
         type: 'lobby_update',
-        players: next,
+        players: nextLobby,
         settings: lobbySettingsRef.current,
       });
-      setLobbyPlayers(next);
+      setLobbyPlayers(nextLobby);
     },
-    [showTransientStatus],
+    [broadcastGame, showTransientStatus],
   );
 
   const cleanup = useCallback(() => {
@@ -275,6 +307,44 @@ export default function LexioOnline() {
   );
 
   useEffect(() => () => cleanup(), [cleanup]);
+
+  // 호스트: AI 좌석 자동 진행
+  useEffect(() => {
+    if (!isHost || screen !== 'game' || !gameView || gameView.phase !== 'playing') {
+      return;
+    }
+
+    const current = gameView.players[gameView.currentPlayerIdx];
+    if (!current?.isAI) return;
+
+    const timer = setTimeout(() => {
+      const gs = gameStateRef.current;
+      if (!gs || gs.phase !== 'playing') return;
+      const cur = gs.players[gs.currentPlayerIdx];
+      if (!cur?.isAI) return;
+
+      const move = aiFindMove(cur.hand, gs.currentPlay);
+      let result;
+      if (move === null) {
+        if (gs.currentPlay) {
+          result = applyPass(gs, cur.seat);
+        } else if (cur.hand.length > 0) {
+          result = applyPlay(gs, cur.seat, [sortHand(cur.hand)[0]]);
+        } else {
+          return;
+        }
+      } else {
+        result = applyPlay(gs, cur.seat, move);
+      }
+
+      if (result.ok) {
+        gameStateRef.current = result.state;
+        broadcastGame(result.state);
+      }
+    }, 900);
+
+    return () => clearTimeout(timer);
+  }, [isHost, screen, gameView, broadcastGame]);
 
   const createRoom = async () => {
     cleanup();
@@ -473,6 +543,7 @@ export default function LexioOnline() {
     setLobbyPlayers([]);
     setGameView(null);
     setGameIntroDone(false);
+    setWelcomeLeaving(false);
     setRoomId('');
     setIsHost(false);
     setStatusMessage('');
@@ -524,6 +595,16 @@ export default function LexioOnline() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [isTableView, gameView, isHost, sessionHasNext, hostNextRound]);
+
+  const showWelcomeOverlay =
+    gameView?.phase === 'playing' && (!gameReady || welcomeLeaving);
+
+  useEffect(() => {
+    if (!gameIntroDone) return;
+    setWelcomeLeaving(true);
+    const timer = setTimeout(() => setWelcomeLeaving(false), 650);
+    return () => clearTimeout(timer);
+  }, [gameIntroDone]);
 
   const toggleSelect = (tileId: number) => {
     if (!gameReady) return;
@@ -913,19 +994,8 @@ export default function LexioOnline() {
               />
             </div>
 
-            {!gameReady && gameView.phase === 'playing' && (
-              <div className="pointer-events-none absolute left-0 right-0 top-20 z-10 flex justify-center px-4">
-                <p
-                  className="pointer-events-none max-w-xl rounded-full px-5 py-2.5 text-center text-sm tracking-wider text-purple-100/90 shadow-lg sm:text-base"
-                  style={{
-                    background: 'rgba(10,10,35,0.72)',
-                    boxShadow:
-                      'inset 0 0 0 1px rgba(168,85,247,0.35), 0 8px 32px rgba(0,0,0,0.45)',
-                  }}
-                >
-                  테이블에 착석하는 중…
-                </p>
-              </div>
+            {showWelcomeOverlay && (
+              <LexioOnlineWelcomeOverlay leaving={welcomeLeaving} />
             )}
 
             {statusMessage && (

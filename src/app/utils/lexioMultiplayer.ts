@@ -31,7 +31,7 @@ export type WireMessage =
   | { type: 'action'; action: 'play' | 'pass'; tileIds?: number[] }
   | { type: 'error'; message: string }
   | { type: 'host_left' }
-  | { type: 'player_left'; nickname: string };
+  | { type: 'player_left'; nickname: string; replacedByAi?: boolean };
 
 export function generateRoomCode(): string {
   let suffix = '';

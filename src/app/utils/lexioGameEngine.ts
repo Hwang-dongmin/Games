@@ -17,7 +17,32 @@ export type OnlineLexioPlayer = {
   name: string;
   hand: LexioTile[];
   passed: boolean;
+  isAI?: boolean;
 };
+
+export function aiPeerId(seat: number): string {
+  return `ai-seat-${seat}`;
+}
+
+export function replacePlayerWithAI(
+  state: LexioGameState,
+  peerId: string,
+): { state: LexioGameState; nickname: string } | null {
+  const idx = state.players.findIndex((p) => p.peerId === peerId);
+  if (idx < 0) return null;
+  const player = state.players[idx];
+  const players = state.players.map((p, i) =>
+    i === idx
+      ? {
+          ...p,
+          isAI: true,
+          peerId: aiPeerId(p.seat),
+          name: `${player.name} (AI)`,
+        }
+      : p,
+  );
+  return { state: { ...state, players }, nickname: player.name };
+}
 
 export type DiscardPlacement = {
   key: string;
@@ -110,7 +135,7 @@ export function startNewRound(state: LexioGameState): LexioGameState {
     players.map((p) => ({
       id: p.seat,
       name: p.name,
-      isAI: false,
+      isAI: p.isAI ?? false,
       hand: p.hand,
       passed: false,
     })),
@@ -319,6 +344,7 @@ export type ClientGameView = {
     handCount: number;
     passed: boolean;
     isYou: boolean;
+    isAI: boolean;
   }[];
   currentPlay: LexioCombination | null;
   trickStarterIdx: number | null;
@@ -349,6 +375,7 @@ export function buildClientView(
       handCount: p.hand.length,
       passed: p.passed,
       isYou: p.peerId === peerId,
+      isAI: p.isAI ?? false,
     })),
     currentPlay: state.currentPlay,
     trickStarterIdx: state.trickStarterIdx,

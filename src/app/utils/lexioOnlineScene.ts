@@ -28,7 +28,7 @@ export function clientViewToPlayers(view: ClientGameView): {
       return {
         id: p.seat,
         name: p.name,
-        isAI: !p.isYou,
+        isAI: p.isAI || !p.isYou,
         hand,
         passed: p.passed,
       };
