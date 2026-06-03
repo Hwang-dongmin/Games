@@ -1,5 +1,4 @@
 import { Text } from '@react-three/drei';
-import * as THREE from 'three';
 import {
   LEXIO_SUIT_FACE,
   type LexioPlaySuit,
@@ -11,9 +10,13 @@ const HIERO_FONT =
 const NUMBER_FONT =
   'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@main/hinted/ttf/NotoSans/NotoSans-Bold.ttf';
 
-/** ☀☽★☁ 등 문양 기호 */
+/** 숫자 outline — 기본 대비 1.5배 */
+const NUMBER_OUTLINE_SCALE = 1.5;
+
 const WATERMARK_FONT =
   'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@main/hinted/ttf/NotoSansSymbols2/NotoSansSymbols2-Regular.ttf';
+
+type SuitFace = (typeof LEXIO_SUIT_FACE)[LexioPlaySuit];
 
 type LexioPlayCardFace3DProps = {
   number: number;
@@ -21,7 +24,6 @@ type LexioPlayCardFace3DProps = {
   width: number;
   height: number;
   isHovered?: boolean;
-  numberTwoHalo?: boolean;
   renderOrder: number;
 };
 
@@ -83,8 +85,150 @@ function GlowText({
   );
 }
 
+/** 숫자 2 — 불투명 앞면 + 가로·세로·대각 4선 */
+function FancyTwoCardFace({
+  width,
+  height,
+  face,
+  renderOrder,
+}: {
+  width: number;
+  height: number;
+  face: SuitFace;
+  renderOrder: number;
+}) {
+  const outerW = width * 0.97;
+  const outerH = height * 0.97;
+  const innerW = width * 0.86;
+  const innerH = height * 0.9;
+  const barT = width * 0.008;
+  const lineTh = width * 0.0555;
+  const clipW = innerW * 0.96;
+  const clipH = innerH * 0.96;
+  const lineH = clipW;
+  const lineV = clipH;
+  const diagAngle = Math.atan2(clipH, clipW);
+  const halfDiagAngle = diagAngle / 2;
+
+  const diagLenAt = (angle: number) => {
+    const c = Math.abs(Math.cos(angle));
+    const s = Math.abs(Math.sin(angle));
+    if (c < 1e-5) return clipH;
+    if (s < 1e-5) return clipW;
+    return Math.min(clipW / c, clipH / s);
+  };
+
+  const diagLine = (angle: number, z: number, opacity = 0.72) => (
+    <mesh
+      key={angle}
+      position={[0, 0, z]}
+      rotation={[0, 0, angle]}
+      renderOrder={renderOrder + 1}
+    >
+      <planeGeometry args={[diagLenAt(angle), lineTh]} />
+      <meshBasicMaterial color={face.color} transparent opacity={opacity} />
+    </mesh>
+  );
+
+  return (
+    <group>
+      <mesh position={[0, 0, -0.004]} renderOrder={renderOrder}>
+        <planeGeometry args={[outerW, outerH]} />
+        <meshBasicMaterial color="#070709" />
+      </mesh>
+      <mesh position={[0, 0, -0.0035]} renderOrder={renderOrder}>
+        <planeGeometry args={[innerW, innerH]} />
+        <meshBasicMaterial color={face.color} transparent opacity={0.11} />
+      </mesh>
+      <mesh position={[0, 0, -0.003]} renderOrder={renderOrder}>
+        <planeGeometry args={[outerW, outerH]} />
+        <meshBasicMaterial color={face.color} />
+      </mesh>
+      <mesh position={[0, 0, -0.0026]} renderOrder={renderOrder}>
+        <planeGeometry args={[outerW - barT * 2.4, outerH - barT * 2.8]} />
+        <meshBasicMaterial color="#070709" />
+      </mesh>
+      <mesh position={[0, 0, -0.002]} renderOrder={renderOrder}>
+        <planeGeometry args={[innerW, innerH]} />
+        <meshBasicMaterial color="#060608" />
+      </mesh>
+      {/* 가로선 */}
+      <mesh position={[0, 0, -0.0008]} renderOrder={renderOrder + 1}>
+        <planeGeometry args={[lineH, lineTh]} />
+        <meshBasicMaterial color={face.color} transparent opacity={0.72} />
+      </mesh>
+      {/* 세로선 */}
+      <mesh position={[0, 0, -0.0007]} renderOrder={renderOrder + 1}>
+        <planeGeometry args={[lineTh, lineV]} />
+        <meshBasicMaterial color={face.color} transparent opacity={0.72} />
+      </mesh>
+      {/* 대각선 — 가로↔대각 사이 보조선 + 주 대각 */}
+      {diagLine(halfDiagAngle, -0.00065, 0.58)}
+      {diagLine(-halfDiagAngle, -0.0006, 0.58)}
+      {diagLine(diagAngle, -0.00055, 0.72)}
+      {diagLine(-diagAngle, -0.0005, 0.72)}
+      <FancyTwoRectFrame
+        halfW={outerW / 2}
+        halfH={outerH / 2}
+        bar={width * 0.02}
+        color={face.color}
+        z={0.004}
+        renderOrder={renderOrder + 6}
+      />
+      <FancyTwoRectFrame
+        halfW={clipW * 0.44}
+        halfH={clipH * 0.44}
+        bar={width * 0.016}
+        color={face.accent}
+        z={0.0045}
+        renderOrder={renderOrder + 6}
+      />
+    </group>
+  );
+}
+
+/** 사각 테두리 4변 — 십자선보다 위에 그려져 보이게 */
+function FancyTwoRectFrame({
+  halfW,
+  halfH,
+  bar,
+  color,
+  z,
+  renderOrder,
+}: {
+  halfW: number;
+  halfH: number;
+  bar: number;
+  color: string;
+  z: number;
+  renderOrder: number;
+}) {
+  const edgeW = halfW * 2;
+  const edgeH = halfH * 2;
+  return (
+    <group>
+      <mesh position={[0, halfH - bar / 2, z]} renderOrder={renderOrder}>
+        <planeGeometry args={[edgeW, bar]} />
+        <meshBasicMaterial color={color} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, -halfH + bar / 2, z]} renderOrder={renderOrder}>
+        <planeGeometry args={[edgeW, bar]} />
+        <meshBasicMaterial color={color} toneMapped={false} />
+      </mesh>
+      <mesh position={[-halfW + bar / 2, 0, z]} renderOrder={renderOrder}>
+        <planeGeometry args={[bar, edgeH]} />
+        <meshBasicMaterial color={color} toneMapped={false} />
+      </mesh>
+      <mesh position={[halfW - bar / 2, 0, z]} renderOrder={renderOrder}>
+        <planeGeometry args={[bar, edgeH]} />
+        <meshBasicMaterial color={color} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
 /**
- * 손패 3D 앞면 — 배경 없음(돌 위에 그림만), depth 정렬 유지
+ * 손패 3D 앞면 — 일반 패는 돌 위에 그림만, 2번은 불투명 화려 앞면
  */
 export function LexioPlayCardFace3D({
   number,
@@ -92,10 +236,10 @@ export function LexioPlayCardFace3D({
   width,
   height,
   isHovered = false,
-  numberTwoHalo = false,
   renderOrder,
 }: LexioPlayCardFace3DProps) {
   const face = LEXIO_SUIT_FACE[suit];
+  const isFancyTwo = number === 2;
   const hw = width / 2;
   const hh = height / 2;
   const hoverScale = isHovered ? 1.03 : 1;
@@ -107,145 +251,166 @@ export function LexioPlayCardFace3D({
     hh - height * 0.11,
     0.004,
   ];
-  const markSize = height * 0.13;
-  const glyphSize = height * 0.11;
-  const labelSize = height * 0.065;
+  const fancyNumPos: [number, number, number] = [0, 0, 0.005];
+  const fancyNumSize = height * 0.35 * 0.9;
+  const fancyNumDiscR = fancyNumSize * 0.58;
+  const numDiscR = numSize * (0.5 + (numStr.length - 1) * 0.2);
+  const numDiscPos: [number, number, number] = [
+    numPos[0] + numDiscR * 0.82,
+    numPos[1] - numDiscR * 0.88,
+    0.003,
+  ];
 
   return (
     <group scale={[hoverScale, hoverScale, 1]}>
-      {numberTwoHalo && (
+      {isFancyTwo && (
+        <FancyTwoCardFace
+          width={width}
+          height={height}
+          face={face}
+          renderOrder={renderOrder}
+        />
+      )}
+
+      {/* 바탕 워터마크 — 2번 패는 제외 */}
+      {!isFancyTwo && (
         <>
-          <mesh position={[0, 0, -0.003]} renderOrder={renderOrder - 2}>
-            <planeGeometry args={[width * 1.18, height * 1.18]} />
-            <meshBasicMaterial
-              color="#fcd34d"
-              transparent
-              opacity={0.28}
-              depthWrite={false}
-              blending={THREE.AdditiveBlending}
-            />
-          </mesh>
-          <mesh position={[0, 0, -0.002]} renderOrder={renderOrder - 1}>
-            <planeGeometry args={[width * 1.08, height * 1.08]} />
-            <meshBasicMaterial
-              color="#fbbf24"
-              transparent
-              opacity={0.45}
-              depthWrite={false}
-            />
-          </mesh>
+          <GlowText
+            position={[0, -height * 0.02, 0.001]}
+            fontSize={height * 0.68}
+            color={face.glow}
+            fillOpacity={0}
+            strokeWidth={height * 0.018}
+            strokeColor={face.glow}
+            strokeOpacity={0.42}
+            renderOrder={renderOrder + 1}
+            anchorX="center"
+            anchorY="middle"
+            font={WATERMARK_FONT}
+          >
+            {face.watermark}
+          </GlowText>
+          <GlowText
+            position={[0, -height * 0.02, 0.0015]}
+            fontSize={height * 0.68}
+            color={face.color}
+            fillOpacity={0}
+            strokeWidth={height * 0.011}
+            strokeColor={face.color}
+            strokeOpacity={0.55}
+            renderOrder={renderOrder + 2}
+            anchorX="center"
+            anchorY="middle"
+            font={WATERMARK_FONT}
+          >
+            {face.watermark}
+          </GlowText>
         </>
       )}
 
-      {/* 바탕 워터마크 — 해·달·별·구름, 외곽선만 (outlineWidth는 내부까지 채워짐) */}
-      <GlowText
-        position={[0, -height * 0.02, 0.001]}
-        fontSize={height * 0.68}
-        color={face.glow}
-        fillOpacity={0}
-        strokeWidth={height * 0.018}
-        strokeColor={face.glow}
-        strokeOpacity={0.42}
-        renderOrder={renderOrder + 1}
-        anchorX="center"
-        anchorY="middle"
-        font={WATERMARK_FONT}
-      >
-        {face.watermark}
-      </GlowText>
-      <GlowText
-        position={[0, -height * 0.02, 0.0015]}
-        fontSize={height * 0.68}
-        color={face.color}
-        fillOpacity={0}
-        strokeWidth={height * 0.011}
-        strokeColor={face.color}
-        strokeOpacity={0.55}
+      <mesh
+        position={
+          isFancyTwo ? [0, 0, 0.003] : [numDiscPos[0], numDiscPos[1], numDiscPos[2]]
+        }
         renderOrder={renderOrder + 2}
-        anchorX="center"
-        anchorY="middle"
-        font={WATERMARK_FONT}
       >
-        {face.watermark}
-      </GlowText>
-      {/* 숫자 */}
+        <circleGeometry
+          args={[isFancyTwo ? fancyNumDiscR : numDiscR, 40]}
+        />
+        <meshBasicMaterial color="#030303" />
+      </mesh>
+
+      {/* 숫자 — 2번은 가운데, 그 외 좌상단 */}
       <GlowText
-        position={[numPos[0] - 0.002, numPos[1] - 0.002, numPos[2] - 0.001]}
-        fontSize={numSize * 1.06}
+        position={
+          isFancyTwo
+            ? [fancyNumPos[0] - 0.002, fancyNumPos[1] - 0.002, fancyNumPos[2] - 0.001]
+            : [numPos[0] - 0.002, numPos[1] - 0.002, numPos[2] - 0.001]
+        }
+        fontSize={isFancyTwo ? fancyNumSize * 1.06 : numSize * 1.06}
         color={face.glow}
-        fillOpacity={0.45}
+        fillOpacity={isFancyTwo ? 0.55 : 0.45}
         renderOrder={renderOrder + 3}
-        anchorX="left"
-        anchorY="top"
+        anchorX={isFancyTwo ? 'center' : 'left'}
+        anchorY={isFancyTwo ? 'middle' : 'top'}
         font={NUMBER_FONT}
       >
         {numStr}
       </GlowText>
       <GlowText
-        position={numPos}
-        fontSize={numSize}
+        position={isFancyTwo ? fancyNumPos : numPos}
+        fontSize={isFancyTwo ? fancyNumSize : numSize}
         color={face.color}
-        outlineWidth={height * 0.018}
+        outlineWidth={
+          height *
+          (isFancyTwo ? 0.026 : 0.018) *
+          NUMBER_OUTLINE_SCALE
+        }
+        outlineColor="#000000"
         renderOrder={renderOrder + 4}
-        anchorX="left"
-        anchorY="top"
+        anchorX={isFancyTwo ? 'center' : 'left'}
+        anchorY={isFancyTwo ? 'middle' : 'top'}
         font={NUMBER_FONT}
       >
         {numStr}
       </GlowText>
 
-      {/* 하단: 문양 + 상형문자 */}
-      <GlowText
-        position={[-hw + width * 0.1, -hh + height * 0.16, 0.005]}
-        fontSize={markSize}
-        color={face.color}
-        fillOpacity={0.35}
-        renderOrder={renderOrder + 3}
-        anchorX="left"
-        anchorY="middle"
-      >
-        {face.mark}
-      </GlowText>
-      <GlowText
-        position={[-hw + width * 0.1, -hh + height * 0.16, 0.006]}
-        fontSize={markSize}
-        color={face.color}
-        outlineWidth={height * 0.006}
-        renderOrder={renderOrder + 4}
-        anchorX="left"
-        anchorY="middle"
-      >
-        {face.mark}
-      </GlowText>
+      {!isFancyTwo && (
+        <>
+          {/* 하단: 문양 + 상형문자 */}
+          <GlowText
+            position={[-hw + width * 0.1, -hh + height * 0.16, 0.005]}
+            fontSize={height * 0.13}
+            color={face.color}
+            fillOpacity={0.35}
+            renderOrder={renderOrder + 3}
+            anchorX="left"
+            anchorY="middle"
+          >
+            {face.mark}
+          </GlowText>
+          <GlowText
+            position={[-hw + width * 0.1, -hh + height * 0.16, 0.006]}
+            fontSize={height * 0.13}
+            color={face.color}
+            outlineWidth={height * 0.006}
+            renderOrder={renderOrder + 4}
+            anchorX="left"
+            anchorY="middle"
+          >
+            {face.mark}
+          </GlowText>
 
-      <GlowText
-        position={[hw - width * 0.1, -hh + height * 0.17, 0.005]}
-        fontSize={glyphSize}
-        color={face.glow}
-        fillOpacity={0}
-        outlineWidth={height * 0.009}
-        outlineColor={face.glow}
-        font={HIERO_FONT}
-        renderOrder={renderOrder + 4}
-        anchorX="right"
-        anchorY="middle"
-      >
-        {face.glyph}
-      </GlowText>
-      <GlowText
-        position={[hw - width * 0.1, -hh + height * 0.26, 0.005]}
-        fontSize={labelSize}
-        color="#737373"
-        fillOpacity={0}
-        outlineWidth={height * 0.005}
-        outlineColor="#737373"
-        font={HIERO_FONT}
-        renderOrder={renderOrder + 4}
-        anchorX="right"
-        anchorY="middle"
-      >
-        {face.label}
-      </GlowText>
+          <GlowText
+            position={[hw - width * 0.1, -hh + height * 0.17, 0.005]}
+            fontSize={height * 0.11}
+            color={face.glow}
+            fillOpacity={0}
+            outlineWidth={height * 0.009}
+            outlineColor={face.glow}
+            font={HIERO_FONT}
+            renderOrder={renderOrder + 4}
+            anchorX="right"
+            anchorY="middle"
+          >
+            {face.glyph}
+          </GlowText>
+          <GlowText
+            position={[hw - width * 0.1, -hh + height * 0.26, 0.005]}
+            fontSize={height * 0.065}
+            color="#737373"
+            fillOpacity={0}
+            outlineWidth={height * 0.005}
+            outlineColor="#737373"
+            font={HIERO_FONT}
+            renderOrder={renderOrder + 4}
+            anchorX="right"
+            anchorY="middle"
+          >
+            {face.label}
+          </GlowText>
+        </>
+      )}
     </group>
   );
 }

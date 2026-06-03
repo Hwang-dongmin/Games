@@ -3,40 +3,39 @@ import type { LexioColor } from '../../utils/lexio';
 
 export type LexioPlaySuit = 'sun' | 'moon' | 'star' | 'cloud';
 
-/** 3D 패 앞면 — 상형문자·색상·워터마크 아이콘 */
+/** 3D 패 앞면 — 상형문자·색상·워터마크 아이콘 (쨍한 채도) */
 export const LEXIO_SUIT_FACE = {
   sun: {
-    color: '#ef4444',
-    glow: '#fca5a5',
-    accent: '#f87171',
+    color: '#ff2a2a',
+    glow: '#ff8a8a',
+    accent: '#ff5252',
     glyph: '\u{131F3}',
     label: '\u{13080}',
     mark: '☀',
-    /** 바탕 큰 무늬 — Noto Sans 기호 */
     watermark: '☀',
   },
   moon: {
-    color: '#10b981',
-    glow: '#6ee7b7',
-    accent: '#34d399',
+    color: '#00e676',
+    glow: '#66ffb2',
+    accent: '#00ff9d',
     glyph: '\u{131F9}',
     label: '\u{131FD}',
     mark: '☽',
     watermark: '☽',
   },
   star: {
-    color: '#fbbf24',
-    glow: '#fde68a',
-    accent: '#fcd34d',
+    color: '#ffd400',
+    glow: '#fff44d',
+    accent: '#ffeb3b',
     glyph: '\u{131FC}',
     label: '\u{131FB}',
     mark: '★',
     watermark: '★',
   },
   cloud: {
-    color: '#3b82f6',
-    glow: '#93c5fd',
-    accent: '#60a5fa',
+    color: '#1e90ff',
+    glow: '#7ec8ff',
+    accent: '#42a5ff',
     glyph: '\u{131EF}',
     label: '\u{13217}',
     mark: '☁',
@@ -44,23 +43,29 @@ export const LEXIO_SUIT_FACE = {
   },
 } as const;
 
-/** 이집트 상형문자 (Unicode Egyptian Hieroglyphs) — 해·달·별·하늘/물안개 */
+/** 숫자 2 패면 — 십자선 색 (테두리는 face.color / face.accent 인라인) */
+const FANCY_TWO_FRAME: Record<LexioPlaySuit, { line: string }> = {
+  sun: { line: 'bg-[#ff3030]/80' },
+  moon: { line: 'bg-[#00e676]/80' },
+  star: { line: 'bg-[#ffd400]/80' },
+  cloud: { line: 'bg-[#1e90ff]/80' },
+};
+
+/** 숫자 윤곽 — 기본 대비 1.5배 굵기 (2번 패는 크기에 비례) */
+const numberStrokeStyle = (fancy: boolean) =>
+  ({
+    WebkitTextStroke: fancy ? '1.125px currentColor' : '0.75px currentColor',
+    paintOrder: 'stroke fill',
+  }) as const;
+
 const H = {
-  /** N005 태양 원반 */
   sun: '\u{131F3}',
-  /** D010 라의 눈 (태양과 연관) */
   sunDetail: '\u{13080}',
-  /** N011 초승달 */
   moon: '\u{131F9}',
-  /** N015 초승달 변형 */
   moonDetail: '\u{131FD}',
-  /** N014 별 */
   star: '\u{131FC}',
-  /** N013 별(점) 변형 */
   starDetail: '\u{131FB}',
-  /** N002 하늘 */
   sky: '\u{131EF}',
-  /** N25 물 (구름·비와 연상) */
   skyDetail: '\u{13217}',
 } as const;
 
@@ -75,7 +80,6 @@ const SUIT_CONFIG: Record<
     label: string;
     iconClass: string;
     glyphClass: string;
-    /** 큰 숫자 — 카드 본인 색(빨·초·노·파 대응) */
     numberClass: string;
   }
 > = {
@@ -83,41 +87,44 @@ const SUIT_CONFIG: Record<
     Icon: Sun,
     glyph: H.sun,
     label: H.sunDetail,
-    iconClass: 'text-red-500 drop-shadow-[0_0_6px_rgba(239,68,68,0.55)]',
-    glyphClass: 'text-red-400/90',
+    iconClass: 'text-[#ff2a2a] drop-shadow-[0_0_8px_rgba(255,42,42,0.65)]',
+    glyphClass:
+      'text-transparent [-webkit-text-stroke:0.85px_rgba(255,82,82,0.55)]',
     numberClass:
-      'text-red-500 drop-shadow-[0_0_10px_rgba(239,68,68,0.45)]',
+      'text-[#ff2a2a] drop-shadow-[0_0_12px_rgba(255,42,42,0.55)]',
   },
   moon: {
     Icon: Moon,
     glyph: H.moon,
     label: H.moonDetail,
-    iconClass: 'text-emerald-500 drop-shadow-[0_0_6px_rgba(16,185,129,0.45)]',
-    glyphClass: 'text-emerald-400/90',
+    iconClass: 'text-[#00e676] drop-shadow-[0_0_8px_rgba(0,230,118,0.6)]',
+    glyphClass:
+      'text-transparent [-webkit-text-stroke:0.85px_rgba(0,255,157,0.55)]',
     numberClass:
-      'text-emerald-500 drop-shadow-[0_0_10px_rgba(16,185,129,0.4)]',
+      'text-[#00e676] drop-shadow-[0_0_12px_rgba(0,230,118,0.55)]',
   },
   star: {
     Icon: Star,
     glyph: H.star,
     label: H.starDetail,
-    iconClass: 'text-amber-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.55)]',
-    glyphClass: 'text-amber-300/90',
+    iconClass: 'text-[#ffd400] drop-shadow-[0_0_8px_rgba(255,212,0,0.65)]',
+    glyphClass:
+      'text-transparent [-webkit-text-stroke:0.85px_rgba(255,235,59,0.55)]',
     numberClass:
-      'text-amber-400 drop-shadow-[0_0_10px_rgba(251,191,36,0.45)]',
+      'text-[#ffd400] drop-shadow-[0_0_12px_rgba(255,212,0,0.55)]',
   },
   cloud: {
     Icon: Cloud,
     glyph: H.sky,
     label: H.skyDetail,
-    iconClass: 'text-blue-500 drop-shadow-[0_0_6px_rgba(59,130,246,0.5)]',
-    glyphClass: 'text-blue-400/90',
+    iconClass: 'text-[#1e90ff] drop-shadow-[0_0_8px_rgba(30,144,255,0.6)]',
+    glyphClass:
+      'text-transparent [-webkit-text-stroke:0.85px_rgba(66,165,255,0.55)]',
     numberClass:
-      'text-blue-500 drop-shadow-[0_0_10px_rgba(59,130,246,0.45)]',
+      'text-[#1e90ff] drop-shadow-[0_0_12px_rgba(30,144,255,0.55)]',
   },
 };
 
-/** 렉시오 색 → 문양 (빨·초·노·파) */
 export function lexioColorToSuit(color: LexioColor): LexioPlaySuit {
   const map: Record<LexioColor, LexioPlaySuit> = {
     red: 'sun',
@@ -133,20 +140,11 @@ type LexioPlayCardProps = {
   suit: LexioPlaySuit;
   className?: string;
   small?: boolean;
-  /** 규칙 모달 등: small일 때 세로만 아주 약간 축소 */
   rulesTight?: boolean;
-  /** 3D 등에서 메시 호버와 동기화할 때 true */
   isHovered?: boolean;
-  /** 3D 씬: lift는 부모 그룹이 담당 — CSS translate·hover: 미사용 */
   embed3D?: boolean;
-  /** 판 종료 공개 시 숫자 2 패 후광 */
-  numberTwoHalo?: boolean;
 };
 
-/**
- * 이미지 없이 Tailwind + Lucide만으로 그린 렉시오 패 카드.
- * 상단: 큰 숫자 / 하단: Lucide 문양 + 이집트 상형문자(주·보조)
- */
 export function LexioPlayCard({
   number,
   suit,
@@ -155,8 +153,10 @@ export function LexioPlayCard({
   rulesTight = false,
   isHovered = false,
   embed3D = false,
-  numberTwoHalo = false,
 }: LexioPlayCardProps) {
+  const face = LEXIO_SUIT_FACE[suit];
+  const frame = FANCY_TWO_FRAME[suit];
+  const isFancyTwo = number === 2;
   const { Icon, glyph, label, iconClass, glyphClass, numberClass } =
     SUIT_CONFIG[suit];
   const tight = small && rulesTight;
@@ -165,6 +165,18 @@ export function LexioPlayCard({
       ? 'text-[18px] font-black tabular-nums tracking-tight'
       : 'text-xl font-black tabular-nums tracking-tight'
     : 'text-3xl font-black tabular-nums tracking-tight';
+  const numWide = number >= 10;
+  const numDiscCls = small
+    ? tight
+      ? numWide
+        ? 'h-[1.55rem] w-[2.05rem]'
+        : 'h-[1.55rem] w-[1.55rem]'
+      : numWide
+        ? 'h-[1.65rem] w-[2.15rem]'
+        : 'h-[1.65rem] w-[1.65rem]'
+    : numWide
+      ? 'h-[2rem] w-[2.5rem]'
+      : 'h-[2rem] w-[2rem]';
 
   const hoverLift =
     'transition-[transform,box-shadow,border-color] duration-200 ease-out will-change-transform';
@@ -172,7 +184,6 @@ export function LexioPlayCard({
     'hover:-translate-y-1 hover:scale-[1.05] hover:border-purple-400/45 hover:shadow-[0_14px_32px_-10px_rgba(88,28,135,0.55),inset_0_1px_0_rgba(255,255,255,0.12)]';
   const forcedHover2D =
     '-translate-y-1 scale-[1.05] border-purple-400/55 shadow-[0_14px_32px_-10px_rgba(88,28,135,0.55),inset_0_1px_0_rgba(255,255,255,0.12)]';
-  /** 3D: Y 이동은 LexioTile3D 그룹 — 여기선 확대·테두리만 */
   const forcedHover3D =
     'scale-[1.03] border-purple-400/55 shadow-[0_14px_32px_-10px_rgba(88,28,135,0.55),inset_0_1px_0_rgba(255,255,255,0.12)]';
 
@@ -184,17 +195,25 @@ export function LexioPlayCard({
       ? forcedHover2D
       : hoverCss2D;
 
-  const twoHalo =
-    numberTwoHalo &&
-    'z-[2] border-amber-400/60 ring-2 ring-amber-300/90 shadow-[0_0_16px_3px_rgba(251,191,36,0.85),0_0_36px_10px_rgba(252,211,77,0.35)]';
+  const fancyNumCls = small
+    ? tight
+      ? 'text-[22px] font-black tabular-nums tracking-tight'
+      : 'text-[23px] font-black tabular-nums tracking-tight'
+    : 'text-[2.2rem] font-black tabular-nums tracking-tight';
+  const fancyNumDiscCls = small
+    ? tight
+      ? 'h-[1.85rem] w-[1.85rem]'
+      : 'h-[1.95rem] w-[1.95rem]'
+    : 'h-[2.4rem] w-[2.4rem]';
 
   return (
     <div
       className={[
-        'relative flex flex-col justify-between overflow-hidden rounded-lg',
-        'bg-neutral-950',
-        'border border-neutral-800/90',
-        'shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-2px_0_rgba(0,0,0,0.45),0_2px_0_rgba(0,0,0,0.55),0_6px_14px_-4px_rgba(0,0,0,0.75)]',
+        'relative overflow-hidden rounded-lg',
+        isFancyTwo ? 'flex flex-col justify-center' : 'flex flex-col justify-between',
+        isFancyTwo
+          ? 'bg-neutral-950 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_-2px_0_rgba(0,0,0,0.5),0_2px_0_rgba(0,0,0,0.55),0_6px_14px_-4px_rgba(0,0,0,0.75)]'
+          : 'bg-neutral-950 border border-neutral-800/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-2px_0_rgba(0,0,0,0.45),0_2px_0_rgba(0,0,0,0.55),0_6px_14px_-4px_rgba(0,0,0,0.75)]',
         tight ? 'aspect-[57/79]' : 'aspect-[57/89]',
         small
           ? tight
@@ -203,63 +222,132 @@ export function LexioPlayCard({
           : 'w-[4rem] px-2 py-1.5',
         hoverLift,
         hoverStyle,
-        twoHalo,
         className,
       ]
         .filter(Boolean)
         .join(' ')}
     >
-      <div
-        className={[
-          'pointer-events-none absolute inset-0 rounded-[inherit] opacity-[0.07]',
-          'bg-[radial-gradient(ellipse_at_30%_15%,#fff_0%,transparent_55%)]',
-        ].join(' ')}
-        aria-hidden
-      />
-      <span
-        className={`relative z-[1] leading-none ${numCls} ${numberClass}`}
-      >
-        {number}
-      </span>
-      <div className="relative z-[1] flex items-end justify-between gap-0.5">
-        <Icon
+      {isFancyTwo ? (
+        <>
+          <div
+            className="pointer-events-none absolute inset-0 rounded-[inherit] border-[3px] border-solid"
+            style={{ borderColor: face.color }}
+            aria-hidden
+          />
+          <div
+            className="pointer-events-none absolute inset-0 rounded-[inherit]"
+            style={{
+              background: `radial-gradient(ellipse at 50% 40%, ${face.color}22 0%, transparent 65%)`,
+            }}
+            aria-hidden
+          />
+          <div
+            className="pointer-events-none absolute inset-[6px] z-[1]"
+            aria-hidden
+          >
+            <div
+              className="absolute inset-0 rounded-[4px] border-[2.5px] border-solid box-border"
+              style={{ borderColor: face.accent }}
+            />
+            <div className="absolute inset-[3px] overflow-hidden rounded-[3px]">
+            <div
+              className={`absolute left-0 right-0 top-1/2 h-[10.5px] -translate-y-1/2 ${frame.line}`}
+            />
+            <div
+              className={`absolute bottom-0 top-0 left-1/2 w-[10.5px] -translate-x-1/2 ${frame.line}`}
+            />
+            <div
+              className={`absolute left-1/2 top-1/2 h-[10.5px] w-[106%] -translate-x-1/2 -translate-y-1/2 rotate-[19deg] ${frame.line} opacity-60`}
+            />
+            <div
+              className={`absolute left-1/2 top-1/2 h-[10.5px] w-[106%] -translate-x-1/2 -translate-y-1/2 -rotate-[19deg] ${frame.line} opacity-60`}
+            />
+            <div
+              className={`absolute left-1/2 top-1/2 h-[10.5px] w-[128%] -translate-x-1/2 -translate-y-1/2 rotate-[38deg] ${frame.line}`}
+            />
+            <div
+              className={`absolute left-1/2 top-1/2 h-[10.5px] w-[128%] -translate-x-1/2 -translate-y-1/2 -rotate-[38deg] ${frame.line}`}
+            />
+            </div>
+          </div>
+        </>
+      ) : (
+        <div
           className={[
-            small
-              ? tight
-                ? 'h-3.5 w-3.5 shrink-0'
-                : 'h-4 w-4 shrink-0'
-              : 'h-5 w-5 shrink-0',
-            iconClass,
+            'pointer-events-none absolute inset-0 rounded-[inherit] opacity-[0.07]',
+            'bg-[radial-gradient(ellipse_at_30%_15%,#fff_0%,transparent_55%)]',
           ].join(' ')}
-          strokeWidth={2.25}
           aria-hidden
         />
-        <div className="min-w-0 text-right">
+      )}
+      {isFancyTwo ? (
+        <span className="relative z-[2] mx-auto inline-flex items-center justify-center">
           <span
-            className={[
-              'block leading-none',
-              small
-                ? tight
-                  ? 'text-[12px]'
-                  : 'text-[13px]'
-                : 'text-base',
-              glyphClass,
-            ].join(' ')}
-            style={{ fontFamily: HIERO_FONT }}
-          >
-            {glyph}
-          </span>
+            className={`pointer-events-none absolute rounded-full bg-[#030303] ${fancyNumDiscCls}`}
+            aria-hidden
+          />
           <span
-            className={[
-              'mt-0.5 block text-[9px] font-medium leading-none text-neutral-400',
-              small ? 'scale-95 origin-bottom-right' : '',
-            ].join(' ')}
-            style={{ fontFamily: HIERO_FONT }}
+            className={`relative leading-none ${fancyNumCls} ${numberClass}`}
+            style={numberStrokeStyle(true)}
           >
-            {label}
+            {number}
           </span>
-        </div>
-      </div>
+        </span>
+      ) : (
+        <>
+          <span className="relative z-[1] inline-flex self-start items-center justify-center">
+            <span
+              className={`pointer-events-none absolute rounded-full bg-[#030303] ${numDiscCls}`}
+              aria-hidden
+            />
+            <span
+              className={`relative leading-none ${numCls} ${numberClass}`}
+              style={numberStrokeStyle(false)}
+            >
+              {number}
+            </span>
+          </span>
+          <div className="relative z-[1] flex items-end justify-between gap-0.5">
+            <Icon
+              className={[
+                small
+                  ? tight
+                    ? 'h-3.5 w-3.5 shrink-0'
+                    : 'h-4 w-4 shrink-0'
+                  : 'h-5 w-5 shrink-0',
+                iconClass,
+              ].join(' ')}
+              strokeWidth={2.25}
+              aria-hidden
+            />
+            <div className="min-w-0 text-right">
+              <span
+                className={[
+                  'block leading-none',
+                  small
+                    ? tight
+                      ? 'text-[12px]'
+                      : 'text-[13px]'
+                    : 'text-base',
+                  glyphClass,
+                ].join(' ')}
+                style={{ fontFamily: HIERO_FONT }}
+              >
+                {glyph}
+              </span>
+              <span
+                className={[
+                  'mt-0.5 block text-[9px] font-medium leading-none text-transparent [-webkit-text-stroke:0.5px_rgba(163,163,163,0.38)]',
+                  small ? 'scale-95 origin-bottom-right' : '',
+                ].join(' ')}
+                style={{ fontFamily: HIERO_FONT }}
+              >
+                {label}
+              </span>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
