@@ -6,6 +6,7 @@ import React, {
   useState,
 } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { layoutHandTiles3D } from '../../utils/lexioHandLayout';
 import { Billboard, ContactShadows, Html, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import type {
@@ -123,6 +124,19 @@ const LEXIO_DISCARD_ROUNDED_GEOM = getRoundedTileGeometry(
   TILE_T,
 );
 
+const TILE_RENDER_ORDER: Record<'back' | 'single' | 'front', number> = {
+  back: 0,
+  single: 4,
+  front: 8,
+};
+
+/** Html 오버레이 z-index — 앞줄이 뒤줄 카드 앞면 위에 오도록 */
+const TILE_HTML_Z: Record<'back' | 'single' | 'front', number> = {
+  back: 16777260,
+  single: 16777265,
+  front: 16777271,
+};
+
 function LexioTile3D({
   tile,
   position,
@@ -132,6 +146,8 @@ function LexioTile3D({
   dimmed,
   facePointerHover = true,
   finishReveal = false,
+  rowLayer = 'single',
+  occludeRefs,
 }: {
   tile: LexioTile;
   position: [number, number, number];
@@ -143,6 +159,10 @@ function LexioTile3D({
   facePointerHover?: boolean;
   /** 판 종료 테이블 공개: 숫자 2 패 후광 */
   finishReveal?: boolean;
+  /** 손패 2줄일 때 앞·뒤 가림 순서 */
+  rowLayer?: 'back' | 'single' | 'front';
+  /** 뒤줄 Html만 — 앞줄 돌 메시에 가릴 때 사용 */
+  occludeRefs?: React.RefObject<THREE.Object3D | null>[];
 }) {
   const [hovered, setHovered] = useState(false);
   const interactive = !!onClick;
@@ -156,10 +176,14 @@ function LexioTile3D({
   const cardHovered = showFaceHover && hovered;
   const numberTwoHalo = finishReveal && tile.number === 2;
 
+  const meshOrder = TILE_RENDER_ORDER[rowLayer];
+  const htmlZ = TILE_HTML_Z[rowLayer];
+
   return (
     <group
       position={[position[0], position[1] + lift, position[2]]}
       rotation={rotation ?? [0, 0, 0]}
+      renderOrder={meshOrder}
     >
       {numberTwoHalo && (
         <mesh
@@ -177,7 +201,12 @@ function LexioTile3D({
           />
         </mesh>
       )}
-      <mesh castShadow receiveShadow geometry={LEXIO_TILE_ROUNDED_GEOM}>
+      <mesh
+        castShadow
+        receiveShadow
+        geometry={LEXIO_TILE_ROUNDED_GEOM}
+        renderOrder={meshOrder}
+      >
         <meshStandardMaterial
           color="#16151a"
           metalness={0.04}
@@ -222,8 +251,11 @@ function LexioTile3D({
         /** 박스 폭(TILE_W=0.212)에 맞춰 앞면 DOM 스케일.
          *  DOM small 폭 49.6px ≈ 3D 박스 폭이 되도록 distanceFactor를 보정. */
         distanceFactor={1.55}
-        occlude={false}
-        zIndexRange={[16777271, 0]}
+        occlude={
+          occludeRefs && occludeRefs.length > 0 ? occludeRefs : false
+        }
+        zIndexRange={[htmlZ, 0]}
+        renderOrder={meshOrder + 1}
         style={{ pointerEvents: 'none' }}
       >
         {/** 클릭 가능한 손패(interactive)면 DOM 자체도 pointer 이벤트를 받아
@@ -488,17 +520,23 @@ function OpponentRevealAnimated({
 function HumanRevealAnimated({
   tiles,
   finishHud,
+  narrow,
 }: {
   tiles: LexioTile[];
   finishHud: { handCount: number; roundEarned: number } | null;
+  narrow: boolean;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const t0Ref = useRef<number | null>(null);
   const tileIds = tiles.map((t) => t.id).join(',');
   const gap = TILE_W * 1.1;
   const hud = finishHud ?? { handCount: tiles.length, roundEarned: 0 };
-  const n = tiles.length;
-  const total = Math.max(0, (n - 1) * gap);
+  const placements = layoutHandTiles3D(tiles, { narrow, gap });
+  const maxX = placements.reduce(
+    (m, p) => Math.max(m, Math.abs(p.position[0])),
+    0,
+  );
+  const total = maxX * 2 + TILE_W;
 
   const pStart = useMemo(
     () => new THREE.Vector3(0, TILE_CENTER_Y, 1.42),
@@ -547,11 +585,12 @@ function HumanRevealAnimated({
 
   return (
     <group ref={groupRef}>
-      {tiles.map((tile, i) => (
+      {placements.map(({ tile, position, rowLayer }) => (
         <LexioTile3D
           key={tile.id}
           tile={tile}
-          position={[-total / 2 + i * gap, 0, 0]}
+          position={position}
+          rowLayer={rowLayer}
           facePointerHover={false}
           finishReveal
         />
@@ -559,7 +598,7 @@ function HumanRevealAnimated({
       <FinishHandHudBillboard
         handCount={hud.handCount}
         roundEarned={hud.roundEarned}
-        position={[total / 2 + TILE_W * 1.25, TILE_H * 0.32 + 0.12, 0.06]}
+        position={[total / 2 + TILE_W * 0.35, TILE_H * 0.32 + 0.12, 0.06]}
         anchorX="left"
       />
     </group>
@@ -770,6 +809,8 @@ function CenterPlay3D({
   );
 }
 
+const HAND_NARROW_BREAKPOINT_PX = 768;
+
 function HandRow3D({
   tiles,
   selectedIds,
@@ -785,43 +826,73 @@ function HandRow3D({
   reveal: boolean;
   finishHud?: { handCount: number; roundEarned: number } | null;
 }) {
+  const { size } = useThree();
+  const frontOccludeRef = useRef<THREE.Group>(null);
+  const narrow = size.width < HAND_NARROW_BREAKPOINT_PX;
   const n = tiles.length;
 
   if (reveal) {
     if (n === 0) return null;
     return (
-      <HumanRevealAnimated tiles={tiles} finishHud={finishHud ?? null} />
+      <HumanRevealAnimated
+        tiles={tiles}
+        finishHud={finishHud ?? null}
+        narrow={narrow}
+      />
     );
   }
 
   const gap = TILE_W * 1.1;
-  const total = (n - 1) * gap;
+  const placements = layoutHandTiles3D(tiles, { narrow, gap });
+  const backPlacements = placements.filter((p) => p.rowLayer === 'back');
+  const frontPlacements = placements.filter(
+    (p) => p.rowLayer === 'front' || p.rowLayer === 'single',
+  );
+
+  const backOccludeRefs = useMemo(
+    () => (frontPlacements.length > 0 ? [frontOccludeRef] : []),
+    [frontPlacements.length],
+  );
+
+  const renderPlacement = (
+    p: (typeof placements)[number],
+    useOcclude: boolean,
+  ) => {
+    const selected = selectedIds.includes(p.tile.id);
+    return (
+      <LexioTile3D
+        key={p.tile.id}
+        tile={p.tile}
+        position={p.position}
+        rotation={[0, 0, 0]}
+        selected={selected}
+        rowLayer={p.rowLayer}
+        occludeRefs={useOcclude ? backOccludeRefs : undefined}
+        onClick={enabled ? () => onToggle(p.tile.id) : undefined}
+      />
+    );
+  };
 
   return (
     <group position={[0, TILE_CENTER_Y, 1.5]} rotation={[TILT_BACK, 0, 0]}>
-      {tiles.map((tile, i) => {
-        const x = -total / 2 + i * gap;
-        const selected = selectedIds.includes(tile.id);
-        return (
-          <LexioTile3D
-            key={tile.id}
-            tile={tile}
-            position={[x, 0, 0]}
-            rotation={[0, 0, 0]}
-            selected={selected}
-            onClick={enabled ? () => onToggle(tile.id) : undefined}
-          />
-        );
-      })}
+      {backPlacements.length > 0 && (
+        <group renderOrder={0}>
+          {backPlacements.map((p) => renderPlacement(p, true))}
+        </group>
+      )}
+      <group ref={frontOccludeRef} renderOrder={10}>
+        {frontPlacements.map((p) => renderPlacement(p, false))}
+      </group>
     </group>
   );
 }
 
-/** 플레이어 id(1~4 AI)별 좌석 — 반시계 차례 남→서→북서→북동→동 과 맞춤 */
-const AI_SEAT_BY_ID: Record<
+/** 좌석 번호별 테이블 위치 (0=북, 1=서, 2=동, 3=북서, 4=북동) */
+const TABLE_SEAT_BY_ID: Record<
   number,
   { pos: [number, number, number]; yaw: number }
 > = {
+  0: { pos: [0, 0, -2.55], yaw: Math.PI },
   1: { pos: [-2.78, 0, 0.44], yaw: -0.5 },
   2: { pos: [2.78, 0, 0.44], yaw: 0.5 },
   3: { pos: [-1.72, 0, -2.52], yaw: -1.0 },
@@ -864,15 +935,9 @@ function SceneContent({
       yaw,
       cardYaw: Math.atan2(pos[0], pos[2]),
     });
-    if (aiPlayers.length !== 4) {
-      return aiPlayers.map((p, i) =>
-        make(p, [(-1.5 + i) * 0.82, 0, -2.55], 0),
-      );
-    }
     return aiPlayers.map((p) => {
-      const cfg = AI_SEAT_BY_ID[p.id];
-      if (cfg) return make(p, cfg.pos, cfg.yaw);
-      return make(p, [0, 0, -2.55], 0);
+      const cfg = TABLE_SEAT_BY_ID[p.id] ?? TABLE_SEAT_BY_ID[1];
+      return make(p, cfg.pos, cfg.yaw);
     });
   }, [aiPlayers]);
 

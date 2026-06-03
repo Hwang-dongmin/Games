@@ -1,7 +1,8 @@
 import {
   LexioTile,
   LexioCombination,
-  createDeck,
+  createDeckForPlayerCount,
+  lexioHandSizeForPlayerCount,
   shuffle,
   sortHand,
   detectCombo,
@@ -53,13 +54,7 @@ export type LexioGameState = {
 
 export const MIN_ONLINE_PLAYERS = 3;
 export const MAX_ONLINE_PLAYERS = 5;
-export const ONLINE_HAND_SIZE = 12;
 export const MAX_SESSION_ROUNDS = 20;
-
-function handSizeForCount(count: number): number {
-  if (count === 4) return 13;
-  return ONLINE_HAND_SIZE;
-}
 
 export function createEmptyGameState(
   sessionTotalRounds: number,
@@ -87,8 +82,14 @@ export function dealOnlineHand(
   lobbyPlayers: { seat: number; peerId: string; name: string }[],
 ): OnlineLexioPlayer[] {
   const n = lobbyPlayers.length;
-  const deck = shuffle(createDeck());
-  const size = handSizeForCount(n);
+  const deck = shuffle(createDeckForPlayerCount(n));
+  const size = lexioHandSizeForPlayerCount(n);
+  const needed = n * size;
+  if (deck.length < needed) {
+    throw new Error(
+      `타일이 부족합니다. (${n}인 · 덱 ${deck.length}장 · 필요 ${needed}장)`,
+    );
+  }
   return lobbyPlayers.map((p, idx) => ({
     seat: p.seat,
     peerId: p.peerId,
@@ -330,6 +331,9 @@ export type ClientGameView = {
   lastRoundCoinRows: LastRoundCoinRow[];
   yourHand: LexioTile[];
   yourSeat: number;
+  discardPlacements: DiscardPlacement[];
+  /** 판 종료 시에만 — 테이블 패 공개용 */
+  handsBySeat?: Record<number, LexioTile[]>;
 };
 
 export function buildClientView(
@@ -357,5 +361,12 @@ export function buildClientView(
     lastRoundCoinRows: state.lastRoundCoinRows,
     yourHand: you.hand,
     yourSeat: you.seat,
+    discardPlacements: state.discardPlacements,
+    handsBySeat:
+      state.phase === 'finished'
+        ? Object.fromEntries(
+            state.players.map((p) => [p.seat, p.hand] as const),
+          )
+        : undefined,
   };
 }

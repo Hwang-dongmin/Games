@@ -73,14 +73,45 @@ export function compareTiles(a: LexioTile, b: LexioTile): number {
 }
 
 export function createDeck(): LexioTile[] {
+  return createDeckForPlayerCount(5);
+}
+
+/** 보드게임 인원별 타일 구성 (3·4·5인) */
+export function createDeckForPlayerCount(playerCount: number): LexioTile[] {
+  const n = Math.min(5, Math.max(3, Math.floor(playerCount)));
+  const maxNumber = n <= 3 ? 9 : n === 4 ? 13 : 15;
   const deck: LexioTile[] = [];
   let id = 0;
   for (const color of COLORS) {
-    for (let n = 1; n <= 15; n++) {
-      deck.push({ id: id++, number: n, color });
+    for (let num = 1; num <= maxNumber; num++) {
+      deck.push({ id: id++, number: num, color });
     }
   }
   return deck;
+}
+
+/** 인원별 초기 패 수: 3·5인 12장, 4인 13장 */
+export function lexioHandSizeForPlayerCount(playerCount: number): number {
+  const n = Math.min(5, Math.max(3, Math.floor(playerCount)));
+  return n === 4 ? 13 : 12;
+}
+
+export function lexioDeckTileCount(playerCount: number): number {
+  const n = Math.min(5, Math.max(3, Math.floor(playerCount)));
+  const maxNumber = n <= 3 ? 9 : n === 4 ? 13 : 15;
+  return maxNumber * COLORS.length;
+}
+
+export function lexioRulesLabelForPlayerCount(playerCount: number): string {
+  const n = Math.min(5, Math.max(3, Math.floor(playerCount)));
+  const hand = lexioHandSizeForPlayerCount(n);
+  if (n === 3) {
+    return `3인: 숫자 1~9 타일만 · 각 ${hand}장 (총 ${lexioDeckTileCount(n)}장)`;
+  }
+  if (n === 4) {
+    return `4인: 숫자 1~13 · 각 ${hand}장 (총 ${lexioDeckTileCount(n)}장)`;
+  }
+  return `5인: 전체 60장 · 각 ${hand}장`;
 }
 
 export function shuffle<T>(arr: T[]): T[] {

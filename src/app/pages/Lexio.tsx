@@ -1284,27 +1284,19 @@ export default function Lexio() {
               : 'mb-4'
           }`}
         >
-          <div className="flex items-center gap-2">
-            <Link
-              to="/"
-              className="inline-flex items-center gap-2 rounded-full bg-white/[0.05] px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.4)] transition-colors duration-200 hover:bg-white/[0.12] hover:text-white hover:shadow-[inset_0_0_0_1px_rgba(168,85,247,0.7)]"
-            >
-              <Home className="w-4 h-4" />
-              홈
-            </Link>
-            <Link
-              to="/lexio/online"
-              className="hidden sm:inline-flex rounded-full bg-white/[0.05] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-purple-200/90 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.35)] hover:bg-white/[0.1] hover:text-white"
-            >
-              온라인
-            </Link>
-          </div>
+          <Link
+            to="/"
+            className="inline-flex items-center gap-2 rounded-full bg-white/[0.05] px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.4)] transition-colors duration-200 hover:bg-white/[0.12] hover:text-white hover:shadow-[inset_0_0_0_1px_rgba(168,85,247,0.7)]"
+          >
+            <Home className="w-4 h-4" />
+            홈
+          </Link>
           <div className="text-center">
             <p className="text-[10px] tracking-[0.5em] text-purple-300/70 uppercase">
-              Lexio
+              렉시오
             </p>
             <h1 className="text-2xl sm:text-3xl font-serif tracking-wider text-purple-100">
-              렉 시 오
+              Lexio
             </h1>
             {isTableView && (
               <p className="mt-1 text-[11px] tracking-wide text-purple-200/80">
@@ -1339,10 +1331,10 @@ export default function Lexio() {
               }}
             >
               <p className="text-[10px] tracking-[0.5em] text-purple-300/80 uppercase mb-3">
-                Welcome
+                환영합니다
               </p>
               <h2 className="text-2xl font-serif tracking-wide text-purple-100 mb-3">
-                렉시오에 오신 것을 환영합니다
+                Welcome to Lexio
               </h2>
               <p className="text-purple-100/70 text-sm mb-6 leading-relaxed">
                 렉시오는 3인~5인까지 즐길 수 있는 한국식 셰딩 게임입니다.
