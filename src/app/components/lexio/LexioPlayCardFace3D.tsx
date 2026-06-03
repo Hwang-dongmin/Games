@@ -34,6 +34,10 @@ function GlowText({
   outlineWidth = 0,
   fillOpacity = 1,
   outlineColor = '#000000',
+  outlineOpacity,
+  strokeWidth = 0,
+  strokeColor,
+  strokeOpacity,
   anchorX = 'left',
   anchorY = 'middle',
   font,
@@ -46,6 +50,10 @@ function GlowText({
   outlineWidth?: number;
   fillOpacity?: number;
   outlineColor?: string;
+  outlineOpacity?: number;
+  strokeWidth?: number;
+  strokeColor?: string;
+  strokeOpacity?: number;
   anchorX?: 'left' | 'center' | 'right';
   anchorY?: 'top' | 'middle' | 'bottom';
   font?: string;
@@ -62,6 +70,10 @@ function GlowText({
       fillOpacity={fillOpacity}
       outlineWidth={outlineWidth}
       outlineColor={outlineColor}
+      outlineOpacity={outlineOpacity}
+      strokeWidth={strokeWidth}
+      strokeColor={strokeColor}
+      strokeOpacity={strokeOpacity}
       material-depthTest
       material-depthWrite={false}
       material-transparent
@@ -125,14 +137,15 @@ export function LexioPlayCardFace3D({
         </>
       )}
 
-      {/* 바탕 워터마크 — 해·달·별·구름, 두꺼운 선 */}
+      {/* 바탕 워터마크 — 해·달·별·구름, 외곽선만 (outlineWidth는 내부까지 채워짐) */}
       <GlowText
         position={[0, -height * 0.02, 0.001]}
         fontSize={height * 0.68}
         color={face.glow}
         fillOpacity={0}
-        outlineWidth={height * 0.042}
-        outlineColor={face.glow}
+        strokeWidth={height * 0.018}
+        strokeColor={face.glow}
+        strokeOpacity={0.42}
         renderOrder={renderOrder + 1}
         anchorX="center"
         anchorY="middle"
@@ -144,24 +157,11 @@ export function LexioPlayCardFace3D({
         position={[0, -height * 0.02, 0.0015]}
         fontSize={height * 0.68}
         color={face.color}
-        fillOpacity={0.1}
-        outlineWidth={height * 0.028}
-        outlineColor={face.color}
+        fillOpacity={0}
+        strokeWidth={height * 0.011}
+        strokeColor={face.color}
+        strokeOpacity={0.55}
         renderOrder={renderOrder + 2}
-        anchorX="center"
-        anchorY="middle"
-        font={WATERMARK_FONT}
-      >
-        {face.watermark}
-      </GlowText>
-      <GlowText
-        position={[0, -height * 0.02, 0.002]}
-        fontSize={height * 0.68}
-        color={face.color}
-        fillOpacity={0.2}
-        outlineWidth={height * 0.016}
-        outlineColor={face.color}
-        renderOrder={renderOrder + 3}
         anchorX="center"
         anchorY="middle"
         font={WATERMARK_FONT}
@@ -221,7 +221,10 @@ export function LexioPlayCardFace3D({
       <GlowText
         position={[hw - width * 0.1, -hh + height * 0.17, 0.005]}
         fontSize={glyphSize}
-        color={face.accent}
+        color={face.glow}
+        fillOpacity={0}
+        outlineWidth={height * 0.009}
+        outlineColor={face.glow}
         font={HIERO_FONT}
         renderOrder={renderOrder + 4}
         anchorX="right"
@@ -232,7 +235,10 @@ export function LexioPlayCardFace3D({
       <GlowText
         position={[hw - width * 0.1, -hh + height * 0.26, 0.005]}
         fontSize={labelSize}
-        color="#a3a3a3"
+        color="#737373"
+        fillOpacity={0}
+        outlineWidth={height * 0.005}
+        outlineColor="#737373"
         font={HIERO_FONT}
         renderOrder={renderOrder + 4}
         anchorX="right"
