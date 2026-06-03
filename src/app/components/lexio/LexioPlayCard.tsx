@@ -157,8 +157,7 @@ export function LexioPlayCard({
   const face = LEXIO_SUIT_FACE[suit];
   const frame = FANCY_TWO_FRAME[suit];
   const isFancyTwo = number === 2;
-  const { Icon, glyph, label, iconClass, glyphClass, numberClass } =
-    SUIT_CONFIG[suit];
+  const { Icon, iconClass, numberClass } = SUIT_CONFIG[suit];
   const tight = small && rulesTight;
   const numCls = small
     ? tight
@@ -319,7 +318,7 @@ export function LexioPlayCard({
               </span>
             </div>
           </span>
-          <div className="relative z-[1] flex items-end justify-between gap-0.5">
+          <div className="relative z-[1] flex items-end justify-end">
             <Icon
               className={[
                 small
@@ -332,31 +331,6 @@ export function LexioPlayCard({
               strokeWidth={2.25}
               aria-hidden
             />
-            <div className="min-w-0 text-right">
-              <span
-                className={[
-                  'block leading-none',
-                  small
-                    ? tight
-                      ? 'text-[12px]'
-                      : 'text-[13px]'
-                    : 'text-base',
-                  glyphClass,
-                ].join(' ')}
-                style={{ fontFamily: HIERO_FONT }}
-              >
-                {glyph}
-              </span>
-              <span
-                className={[
-                  'mt-0.5 block text-[9px] font-medium leading-none text-transparent [-webkit-text-stroke:0.5px_rgba(163,163,163,0.38)]',
-                  small ? 'scale-95 origin-bottom-right' : '',
-                ].join(' ')}
-                style={{ fontFamily: HIERO_FONT }}
-              >
-                {label}
-              </span>
-            </div>
           </div>
         </>
       )}

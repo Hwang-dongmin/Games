@@ -7,9 +7,6 @@ import {
   type LexioPlaySuit,
 } from './LexioPlayCard';
 
-const HIERO_FONT =
-  'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@main/hinted/ttf/NotoSansEgyptianHieroglyphs/NotoSansEgyptianHieroglyphs-Regular.ttf';
-
 const NUMBER_FONT =
   'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@main/hinted/ttf/NotoSans/NotoSans-Bold.ttf';
 
@@ -20,6 +17,306 @@ const WATERMARK_FONT =
   'https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@main/hinted/ttf/NotoSansSymbols2/NotoSansSymbols2-Regular.ttf';
 
 type SuitFace = (typeof LEXIO_SUIT_FACE)[LexioPlaySuit];
+
+function watermarkOffset(width: number, height: number): [number, number, number] {
+  return [-width * 0.045, height * 0.01, 0];
+}
+
+type LinePoint = [number, number];
+
+function sampleArc(
+  cx: number,
+  cy: number,
+  r: number,
+  start: number,
+  end: number,
+  segments = 18,
+): LinePoint[] {
+  const pts: LinePoint[] = [];
+  for (let i = 0; i <= segments; i++) {
+    const t = start + ((end - start) * i) / segments;
+    pts.push([cx + Math.cos(t) * r, cy + Math.sin(t) * r]);
+  }
+  return pts;
+}
+
+function buildCircleLinePoints(radius: number, segments = 56): LinePoint[] {
+  return sampleArc(0, 0, radius, 0, Math.PI * 2, segments);
+}
+
+function WatermarkLineLoop({
+  points,
+  color,
+  opacity,
+  renderOrder,
+  z = 0.001,
+}: {
+  points: LinePoint[];
+  color: string;
+  opacity: number;
+  renderOrder: number;
+  z?: number;
+}) {
+  const line = useMemo(() => {
+    const verts = new Float32Array(points.length * 3);
+    points.forEach(([x, y], i) => {
+      verts[i * 3] = x;
+      verts[i * 3 + 1] = y;
+      verts[i * 3 + 2] = z;
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+    const mat = new THREE.LineBasicMaterial({
+      color,
+      transparent: true,
+      opacity,
+      depthWrite: false,
+    });
+    const loop = new THREE.LineLoop(geo, mat);
+    loop.renderOrder = renderOrder;
+    return loop;
+  }, [points, color, opacity, renderOrder, z]);
+
+  return <primitive object={line} />;
+}
+
+function buildCloudShape(scale: number): THREE.Shape {
+  const s = scale;
+  const shape = new THREE.Shape();
+  shape.moveTo(-s * 0.94, -s * 0.2);
+  shape.lineTo(s * 0.98, -s * 0.2);
+  shape.bezierCurveTo(
+    s * 1.12,
+    -s * 0.2,
+    s * 1.14,
+    s * 0.34,
+    s * 0.58,
+    s * 0.44,
+  );
+  shape.bezierCurveTo(
+    s * 0.48,
+    s * 0.78,
+    s * 0.02,
+    s * 0.86,
+    -s * 0.2,
+    s * 0.56,
+  );
+  shape.bezierCurveTo(
+    -s * 0.62,
+    s * 0.9,
+    -s * 1.12,
+    s * 0.58,
+    -s * 1.02,
+    s * 0.1,
+  );
+  shape.bezierCurveTo(
+    -s * 1.1,
+    -s * 0.12,
+    -s * 0.98,
+    -s * 0.2,
+    -s * 0.94,
+    -s * 0.2,
+  );
+  return shape;
+}
+
+function buildCloudLinePoints(scale: number): LinePoint[] {
+  return buildCloudShape(scale)
+    .getPoints(36)
+    .map((p) => [p.x, p.y]);
+}
+
+function MoonSuitWatermark({
+  height,
+  face,
+  renderOrder,
+}: {
+  height: number;
+  face: SuitFace;
+  renderOrder: number;
+}) {
+  const size = height * 0.68;
+  const outerR = size * 0.38;
+  const crescentSize = outerR * 1.824;
+  const crescentTilt = -0.52;
+  const crescentPos: [number, number, number] = [
+    outerR * 0.36,
+    -outerR * 0.15,
+    0,
+  ];
+
+  const circlePoints = useMemo(
+    () => buildCircleLinePoints(outerR),
+    [outerR],
+  );
+
+  return (
+    <group>
+      <WatermarkLineLoop
+        points={circlePoints}
+        color={face.color}
+        opacity={0.48}
+        renderOrder={renderOrder}
+        z={0.001}
+      />
+      <group position={crescentPos} rotation={[0, 0, crescentTilt]}>
+        <GlowText
+          position={[0, 0, 0.0011]}
+          fontSize={crescentSize}
+          color={face.color}
+          fillOpacity={1}
+          renderOrder={renderOrder + 1}
+          anchorX="center"
+          anchorY="middle"
+          font={WATERMARK_FONT}
+          depthTest={false}
+        >
+          {face.mark}
+        </GlowText>
+        <GlowText
+          position={[0, 0, 0.0012]}
+          fontSize={crescentSize}
+          color={face.glow}
+          fillOpacity={0}
+          strokeWidth={crescentSize * 0.075}
+          strokeColor={face.glow}
+          strokeOpacity={0.38}
+          renderOrder={renderOrder + 2}
+          anchorX="center"
+          anchorY="middle"
+          font={WATERMARK_FONT}
+          depthTest={false}
+        >
+          {face.mark}
+        </GlowText>
+        <GlowText
+          position={[0, 0, 0.0014]}
+          fontSize={crescentSize}
+          color={face.color}
+          fillOpacity={0}
+          strokeWidth={crescentSize * 0.048}
+          strokeColor={face.color}
+          strokeOpacity={0.56}
+          renderOrder={renderOrder + 3}
+          anchorX="center"
+          anchorY="middle"
+          font={WATERMARK_FONT}
+          depthTest={false}
+        >
+          {face.mark}
+        </GlowText>
+      </group>
+    </group>
+  );
+}
+
+function CloudSuitWatermark({
+  height,
+  face,
+  renderOrder,
+}: {
+  height: number;
+  face: SuitFace;
+  renderOrder: number;
+}) {
+  const size = height * 0.68;
+  const cloudScale = size * 0.36;
+
+  const cloudPoints = useMemo(
+    () => buildCloudLinePoints(cloudScale),
+    [cloudScale],
+  );
+
+  return (
+    <group>
+      <WatermarkLineLoop
+        points={cloudPoints}
+        color={face.color}
+        opacity={0.48}
+        renderOrder={renderOrder}
+        z={0.001}
+      />
+    </group>
+  );
+}
+
+function TextSuitWatermark({
+  height,
+  face,
+  renderOrder,
+}: {
+  height: number;
+  face: SuitFace;
+  renderOrder: number;
+}) {
+  return (
+    <>
+      <GlowText
+        position={[0, 0, 0.001]}
+        fontSize={height * 0.68}
+        color={face.glow}
+        fillOpacity={0}
+        strokeWidth={height * 0.018}
+        strokeColor={face.glow}
+        strokeOpacity={0.42}
+        renderOrder={renderOrder + 1}
+        anchorX="center"
+        anchorY="middle"
+        font={WATERMARK_FONT}
+      >
+        {face.watermark}
+      </GlowText>
+      <GlowText
+        position={[0, 0, 0.0015]}
+        fontSize={height * 0.68}
+        color={face.color}
+        fillOpacity={0}
+        strokeWidth={height * 0.011}
+        strokeColor={face.color}
+        strokeOpacity={0.55}
+        renderOrder={renderOrder + 2}
+        anchorX="center"
+        anchorY="middle"
+        font={WATERMARK_FONT}
+      >
+        {face.watermark}
+      </GlowText>
+    </>
+  );
+}
+
+function SuitBackgroundWatermark({
+  suit,
+  width,
+  height,
+  face,
+  renderOrder,
+}: {
+  suit: LexioPlaySuit;
+  width: number;
+  height: number;
+  face: SuitFace;
+  renderOrder: number;
+}) {
+  const offset = watermarkOffset(width, height);
+
+  let content;
+  if (suit === 'moon') {
+    content = (
+      <MoonSuitWatermark height={height} face={face} renderOrder={renderOrder} />
+    );
+  } else if (suit === 'cloud') {
+    content = (
+      <CloudSuitWatermark height={height} face={face} renderOrder={renderOrder} />
+    );
+  } else {
+    content = (
+      <TextSuitWatermark height={height} face={face} renderOrder={renderOrder} />
+    );
+  }
+
+  return <group position={offset}>{content}</group>;
+}
 
 type LexioPlayCardFace3DProps = {
   number: number;
@@ -354,40 +651,15 @@ export function LexioPlayCardFace3D({
         />
       )}
 
-      {/* 바탕 워터마크 — 2번 패는 제외 */}
+      {/* 바탕 워터마크 — 2번 패는 제외, 구름·달은 커스텀 형상 */}
       {!isFancyTwo && (
-        <>
-          <GlowText
-            position={[0, -height * 0.02, 0.001]}
-            fontSize={height * 0.68}
-            color={face.glow}
-            fillOpacity={0}
-            strokeWidth={height * 0.018}
-            strokeColor={face.glow}
-            strokeOpacity={0.42}
-            renderOrder={renderOrder + 1}
-            anchorX="center"
-            anchorY="middle"
-            font={WATERMARK_FONT}
-          >
-            {face.watermark}
-          </GlowText>
-          <GlowText
-            position={[0, -height * 0.02, 0.0015]}
-            fontSize={height * 0.68}
-            color={face.color}
-            fillOpacity={0}
-            strokeWidth={height * 0.011}
-            strokeColor={face.color}
-            strokeOpacity={0.55}
-            renderOrder={renderOrder + 2}
-            anchorX="center"
-            anchorY="middle"
-            font={WATERMARK_FONT}
-          >
-            {face.watermark}
-          </GlowText>
-        </>
+        <SuitBackgroundWatermark
+          suit={suit}
+          width={width}
+          height={height}
+          face={face}
+          renderOrder={renderOrder}
+        />
       )}
 
       <NumDiscBadge
@@ -438,57 +710,27 @@ export function LexioPlayCardFace3D({
 
       {!isFancyTwo && (
         <>
-          {/* 하단: 문양 + 상형문자 */}
           <GlowText
-            position={[-hw + width * 0.1, -hh + height * 0.16, 0.005]}
+            position={[hw - width * 0.1, -hh + height * 0.16, 0.005]}
             fontSize={height * 0.13}
             color={face.color}
             fillOpacity={0.35}
             renderOrder={renderOrder + 3}
-            anchorX="left"
+            anchorX="right"
             anchorY="middle"
           >
             {face.mark}
           </GlowText>
           <GlowText
-            position={[-hw + width * 0.1, -hh + height * 0.16, 0.006]}
+            position={[hw - width * 0.1, -hh + height * 0.16, 0.006]}
             fontSize={height * 0.13}
             color={face.color}
             outlineWidth={height * 0.006}
             renderOrder={renderOrder + 4}
-            anchorX="left"
+            anchorX="right"
             anchorY="middle"
           >
             {face.mark}
-          </GlowText>
-
-          <GlowText
-            position={[hw - width * 0.1, -hh + height * 0.17, 0.005]}
-            fontSize={height * 0.11}
-            color={face.glow}
-            fillOpacity={0}
-            outlineWidth={height * 0.009}
-            outlineColor={face.glow}
-            font={HIERO_FONT}
-            renderOrder={renderOrder + 4}
-            anchorX="right"
-            anchorY="middle"
-          >
-            {face.glyph}
-          </GlowText>
-          <GlowText
-            position={[hw - width * 0.1, -hh + height * 0.26, 0.005]}
-            fontSize={height * 0.065}
-            color="#737373"
-            fillOpacity={0}
-            outlineWidth={height * 0.005}
-            outlineColor="#737373"
-            font={HIERO_FONT}
-            renderOrder={renderOrder + 4}
-            anchorX="right"
-            anchorY="middle"
-          >
-            {face.label}
           </GlowText>
         </>
       )}
