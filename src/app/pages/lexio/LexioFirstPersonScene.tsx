@@ -153,6 +153,7 @@ function LexioTile3D({
   finishReveal = false,
   rowLayer = 'single',
   occludeRefs,
+  stoneMeshRef,
 }: {
   tile: LexioTile;
   position: [number, number, number];
@@ -166,8 +167,10 @@ function LexioTile3D({
   finishReveal?: boolean;
   /** 손패 2줄일 때 앞·뒤 가림 순서 */
   rowLayer?: 'back' | 'single' | 'front';
-  /** 뒤줄 Html만 — 앞줄 돌 메시에 가릴 때 사용 */
+  /** 뒤줄 Html만 — 앞줄 돌 메시에 가릴 때 사용 (호버 hit-plane 제외) */
   occludeRefs?: React.RefObject<THREE.Object3D | null>[];
+  /** 앞줄 돌 메시 ref — 뒤줄 Html occlude 대상 등록용 */
+  stoneMeshRef?: React.RefObject<THREE.Mesh | null>;
 }) {
   const [hovered, setHovered] = useState(false);
   const interactive = !!onClick;
@@ -207,6 +210,7 @@ function LexioTile3D({
         </mesh>
       )}
       <mesh
+        ref={stoneMeshRef}
         castShadow
         receiveShadow
         geometry={LEXIO_TILE_ROUNDED_GEOM}
@@ -832,7 +836,6 @@ function HandRow3D({
   finishHud?: { handCount: number; roundEarned: number } | null;
 }) {
   const { size } = useThree();
-  const frontOccludeRef = useRef<THREE.Group>(null);
   const narrow = size.width < HAND_NARROW_BREAKPOINT_PX;
   const n = tiles.length;
 
@@ -853,15 +856,28 @@ function HandRow3D({
   const frontPlacements = placements.filter(
     (p) => p.rowLayer === 'front' || p.rowLayer === 'single',
   );
+  const frontPlacementKey = frontPlacements.map((p) => p.tile.id).join(',');
+
+  const frontStoneRefs = useMemo(
+    () =>
+      frontPlacements.map(() => React.createRef<THREE.Mesh | null>()),
+    [frontPlacementKey],
+  );
 
   const backOccludeRefs = useMemo(
-    () => (frontPlacements.length > 0 ? [frontOccludeRef] : []),
-    [frontPlacements.length],
+    () =>
+      frontStoneRefs.length > 0
+        ? (frontStoneRefs as React.RefObject<THREE.Object3D | null>[])
+        : [],
+    [frontStoneRefs],
   );
 
   const renderPlacement = (
     p: (typeof placements)[number],
-    useOcclude: boolean,
+    options: {
+      useOcclude: boolean;
+      stoneMeshRef?: React.RefObject<THREE.Mesh | null>;
+    },
   ) => {
     const selected = selectedIds.includes(p.tile.id);
     return (
@@ -872,7 +888,8 @@ function HandRow3D({
         rotation={[0, 0, 0]}
         selected={selected}
         rowLayer={p.rowLayer}
-        occludeRefs={useOcclude ? backOccludeRefs : undefined}
+        occludeRefs={options.useOcclude ? backOccludeRefs : undefined}
+        stoneMeshRef={options.stoneMeshRef}
         onClick={enabled ? () => onToggle(p.tile.id) : undefined}
       />
     );
@@ -882,11 +899,18 @@ function HandRow3D({
     <group position={[0, TILE_CENTER_Y, 1.5]} rotation={[TILT_BACK, 0, 0]}>
       {backPlacements.length > 0 && (
         <group renderOrder={0}>
-          {backPlacements.map((p) => renderPlacement(p, true))}
+          {backPlacements.map((p) =>
+            renderPlacement(p, { useOcclude: true }),
+          )}
         </group>
       )}
-      <group ref={frontOccludeRef} renderOrder={10}>
-        {frontPlacements.map((p) => renderPlacement(p, false))}
+      <group renderOrder={10}>
+        {frontPlacements.map((p, i) =>
+          renderPlacement(p, {
+            useOcclude: false,
+            stoneMeshRef: frontStoneRefs[i],
+          }),
+        )}
       </group>
     </group>
   );
