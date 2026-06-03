@@ -1,5 +1,6 @@
 import React, {
   Suspense,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -60,6 +61,10 @@ const TILE_CENTER_Y = TABLE_TOP_Y + TILE_H / 2;
 const TILT_BACK = -0.18;
 /** 판 종료: 패 공개·카메라 탑다운 애니메이션 길이(초) */
 const FINISH_REVEAL_SEC = 2;
+/** 세션 최초 진입: 위에서 시계방향으로 내려오며 1인칭 시점(초) */
+const START_INTRO_SEC = 4.2;
+/** 시계방향 회전량(라디안): 기본 호 + 한 바퀴(2π) */
+const START_INTRO_ROTATION = Math.PI * 0.72 + Math.PI * 2;
 
 function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -910,6 +915,7 @@ function SceneContent({
   discardPlacements,
   finishTableUi,
   sessionCoinsByPlayerId,
+  handInteractionEnabled = true,
 }: {
   players: LexioPlayer[];
   currentPlayerIdx: number;
@@ -921,6 +927,7 @@ function SceneContent({
   discardPlacements: LexioDiscardPlacement[];
   finishTableUi: LexioFinishTableUi | null;
   sessionCoinsByPlayerId: Record<number, number>;
+  handInteractionEnabled?: boolean;
 }) {
   const aiPlayers = useMemo(() => players.filter((p) => p.isAI), [players]);
 
@@ -1002,7 +1009,7 @@ function SceneContent({
           tiles={humanPlayer.hand}
           selectedIds={selectedIds}
           onToggle={onToggleTile}
-          enabled={phase === 'playing'}
+          enabled={phase === 'playing' && handInteractionEnabled}
           reveal={reveal}
           finishHud={
             reveal && humanPlayer
@@ -1028,16 +1035,45 @@ function SceneContent({
   );
 }
 
-/** 1인칭 → 판 종료 시 테이블 거의 수직 내려다보기(2초) */
+function setIntroStartPose(
+  camera: THREE.Camera,
+  angle: number,
+  radius: number,
+  height: number,
+  lookAt: THREE.Vector3,
+) {
+  camera.position.set(Math.sin(angle) * radius, height, Math.cos(angle) * radius);
+  camera.lookAt(lookAt);
+  camera.updateProjectionMatrix();
+}
+
+/** 1인칭 · 세션 최초 진입 인트로 · 판 종료 탑다운 */
 function FirstPersonCameraRig({
   phase,
+  playStartIntro = false,
+  onStartIntroComplete,
 }: {
   phase: 'setup' | 'playing' | 'finished';
+  playStartIntro?: boolean;
+  onStartIntroComplete?: () => void;
 }) {
   const camera = useThree((s) => s.camera);
   const finishStartRef = useRef<number | null>(null);
+  const introStartRef = useRef<number | null>(null);
+  const introDoneRef = useRef(!playStartIntro);
+  const introCompleteSentRef = useRef(false);
+  const onIntroCompleteRef = useRef(onStartIntroComplete);
+  onIntroCompleteRef.current = onStartIntroComplete;
 
   const camPos0 = useMemo(() => new THREE.Vector3(0, 3.45, 4.55), []);
+  const camEndRadius = useMemo(
+    () => Math.hypot(camPos0.x, camPos0.z),
+    [camPos0],
+  );
+  const camEndAngle = useMemo(
+    () => Math.atan2(camPos0.x, camPos0.z),
+    [camPos0],
+  );
   /** 판 종료 시 탑다운 카메라 위치(lerp 끝점) */
   const camPos1 = useMemo(() => new THREE.Vector3(0, 5.38, 0.24), []);
   const look0 = useMemo(() => new THREE.Vector3(0, 0.52, -0.12), []);
@@ -1045,17 +1081,89 @@ function FirstPersonCameraRig({
     () => new THREE.Vector3(0, TABLE_TOP_Y + 0.02, 0),
     [],
   );
+  const introLookStart = useMemo(
+    () => new THREE.Vector3(0, TABLE_TOP_Y + 0.02, 0),
+    [],
+  );
+  /** 위에서 내려오며 시계방향(−Y 각)으로 1인칭 각도까지 회전 */
+  const introStartAngle = useMemo(
+    () => camEndAngle + START_INTRO_ROTATION,
+    [camEndAngle],
+  );
+  const introStartHeight = 7.85;
+  const introStartRadius = 0.35;
+
+  useEffect(() => {
+    if (playStartIntro) {
+      introDoneRef.current = false;
+      introStartRef.current = null;
+      introCompleteSentRef.current = false;
+    } else {
+      introDoneRef.current = true;
+    }
+  }, [playStartIntro]);
 
   useLayoutEffect(() => {
-    if (phase !== 'finished') {
+    if (phase === 'finished') return;
+    if (playStartIntro && !introDoneRef.current) {
       finishStartRef.current = null;
-      camera.position.copy(camPos0);
-      camera.lookAt(look0);
-      camera.updateProjectionMatrix();
+      setIntroStartPose(
+        camera,
+        introStartAngle,
+        introStartRadius,
+        introStartHeight,
+        introLookStart,
+      );
+      return;
     }
-  }, [phase, camera, camPos0, look0]);
+    finishStartRef.current = null;
+    camera.position.copy(camPos0);
+    camera.lookAt(look0);
+    camera.updateProjectionMatrix();
+  }, [
+    phase,
+    camera,
+    camPos0,
+    look0,
+    playStartIntro,
+    introStartAngle,
+    introLookStart,
+  ]);
 
   useFrame((state) => {
+    if (
+      playStartIntro &&
+      !introDoneRef.current &&
+      phase === 'playing'
+    ) {
+      if (introStartRef.current === null) {
+        introStartRef.current = state.clock.elapsedTime;
+      }
+      const raw = Math.min(
+        1,
+        (state.clock.elapsedTime - introStartRef.current) / START_INTRO_SEC,
+      );
+      const t = easeInOutCubic(raw);
+      const angle = introStartAngle + (camEndAngle - introStartAngle) * t;
+      const radius = THREE.MathUtils.lerp(introStartRadius, camEndRadius, t);
+      const height = THREE.MathUtils.lerp(introStartHeight, camPos0.y, t);
+      setIntroStartPose(camera, angle, radius, height, introLookStart);
+      _v3b.lerpVectors(introLookStart, look0, t);
+      camera.lookAt(_v3b);
+      camera.updateProjectionMatrix();
+      if (raw >= 1) {
+        introDoneRef.current = true;
+        camera.position.copy(camPos0);
+        camera.lookAt(look0);
+        camera.updateProjectionMatrix();
+        if (!introCompleteSentRef.current) {
+          introCompleteSentRef.current = true;
+          onIntroCompleteRef.current?.();
+        }
+      }
+      return;
+    }
+
     if (phase !== 'finished') return;
     if (finishStartRef.current === null) {
       finishStartRef.current = state.clock.elapsedTime;
@@ -1086,6 +1194,9 @@ export default function LexioFirstPersonScene({
   discardPlacements = [],
   finishTableUi = null,
   sessionCoinsByPlayerId = {},
+  playStartIntro = false,
+  onStartIntroComplete,
+  interactionEnabled = true,
 }: {
   players: LexioPlayer[];
   currentPlayerIdx: number;
@@ -1097,6 +1208,9 @@ export default function LexioFirstPersonScene({
   discardPlacements?: LexioDiscardPlacement[];
   finishTableUi?: LexioFinishTableUi | null;
   sessionCoinsByPlayerId?: Record<number, number>;
+  playStartIntro?: boolean;
+  onStartIntroComplete?: () => void;
+  interactionEnabled?: boolean;
 }) {
   return (
     <Canvas
@@ -1105,7 +1219,11 @@ export default function LexioFirstPersonScene({
       gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}
       className="h-full w-full touch-none"
     >
-      <FirstPersonCameraRig phase={phase} />
+      <FirstPersonCameraRig
+        phase={phase}
+        playStartIntro={playStartIntro}
+        onStartIntroComplete={onStartIntroComplete}
+      />
       <Suspense fallback={null}>
         <SceneContent
           players={players}
@@ -1118,6 +1236,7 @@ export default function LexioFirstPersonScene({
           discardPlacements={discardPlacements}
           finishTableUi={finishTableUi}
           sessionCoinsByPlayerId={sessionCoinsByPlayerId}
+          handInteractionEnabled={interactionEnabled}
         />
       </Suspense>
     </Canvas>

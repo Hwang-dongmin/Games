@@ -81,6 +81,7 @@ export default function LexioOnline() {
     maxPlayers: 5,
   });
   const [gameView, setGameView] = useState<ClientGameView | null>(null);
+  const [gameIntroDone, setGameIntroDone] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
@@ -430,6 +431,7 @@ export default function LexioOnline() {
     setConnectionStatus('idle');
     setLobbyPlayers([]);
     setGameView(null);
+    setGameIntroDone(false);
     setRoomId('');
     setIsHost(false);
     setStatusMessage('');
@@ -451,6 +453,7 @@ export default function LexioOnline() {
     gameView.sessionCompletedRounds < gameView.sessionTotalRounds;
 
   const isTableView = screen === 'game';
+  const gameReady = gameIntroDone;
 
   const sceneBundle = useMemo(() => {
     if (!gameView) return null;
@@ -482,6 +485,7 @@ export default function LexioOnline() {
   }, [isTableView, gameView, isHost, sessionHasNext, hostNextRound]);
 
   const toggleSelect = (tileId: number) => {
+    if (!gameReady) return;
     setSelectedIds((prev) =>
       prev.includes(tileId)
         ? prev.filter((id) => id !== tileId)
@@ -584,9 +588,26 @@ export default function LexioOnline() {
               <button
                 type="button"
                 onClick={createRoom}
-                className="w-full rounded-full py-3.5 text-base font-bold tracking-widest uppercase text-purple-100 bg-gradient-to-b from-purple-500/50 to-violet-800/60 border border-purple-400/50 hover:brightness-110"
+                className="group relative w-full overflow-hidden rounded-full py-3.5 text-base font-bold tracking-[0.22em] uppercase text-purple-50 transition-all hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0"
+                style={{
+                  background:
+                    'linear-gradient(180deg, rgba(192,132,252,0.55) 0%, rgba(126,34,206,0.72) 45%, rgba(76,29,149,0.9) 100%)',
+                  boxShadow:
+                    'inset 0 0 0 1px rgba(216,180,254,0.65), 0 12px 32px -10px rgba(168,85,247,0.5)',
+                }}
               >
-                새 방 만들기
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                  style={{
+                    background:
+                      'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(255,255,255,0.2) 0%, transparent 70%)',
+                  }}
+                />
+                <span className="relative z-10 inline-flex w-full items-center justify-center gap-2.5">
+                  <Crown className="h-5 w-5 shrink-0 text-amber-200/95" />
+                  새 방 만들기
+                </span>
               </button>
               <p className="mt-3 text-sm text-purple-300/60 leading-relaxed">
                 로그인 없이 PeerJS(P2P)로 친구와 연결합니다. 호스트가 게임을
@@ -624,9 +645,26 @@ export default function LexioOnline() {
                 type="button"
                 onClick={() => joinRoom()}
                 disabled={!parseRoomCodeInput(joinCode)}
-                className="w-full rounded-full py-3.5 text-base font-bold tracking-widest uppercase text-purple-100 bg-white/10 border border-white/20 hover:bg-white/15 disabled:opacity-40"
+                className="group relative w-full overflow-hidden rounded-full py-3.5 text-base font-bold tracking-[0.22em] uppercase text-slate-50 transition-all hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:brightness-100"
+                style={{
+                  background:
+                    'linear-gradient(180deg, rgba(125,211,252,0.55) 0%, rgba(37,99,235,0.72) 42%, rgba(67,56,202,0.88) 100%)',
+                  boxShadow:
+                    'inset 0 0 0 1px rgba(186,230,253,0.65), 0 12px 32px -10px rgba(56,189,248,0.5)',
+                }}
               >
-                참가하기
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-disabled:opacity-0"
+                  style={{
+                    background:
+                      'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(255,255,255,0.22) 0%, transparent 70%)',
+                  }}
+                />
+                <span className="relative z-10 inline-flex w-full items-center justify-center gap-2.5">
+                  <Users className="h-5 w-5 shrink-0 opacity-95" />
+                  참가하기
+                </span>
               </button>
             </section>
           </div>
@@ -822,8 +860,26 @@ export default function LexioOnline() {
                 discardPlacements={gameView.discardPlacements ?? []}
                 finishTableUi={sceneBundle.finishTableUi}
                 sessionCoinsByPlayerId={sceneBundle.sessionCoinsByPlayerId}
+                playStartIntro={!gameIntroDone}
+                onStartIntroComplete={() => setGameIntroDone(true)}
+                interactionEnabled={gameReady}
               />
             </div>
+
+            {!gameReady && gameView.phase === 'playing' && (
+              <div className="pointer-events-none absolute left-0 right-0 top-20 z-10 flex justify-center px-4">
+                <p
+                  className="pointer-events-none max-w-xl rounded-full px-5 py-2.5 text-center text-sm tracking-wider text-purple-100/90 shadow-lg sm:text-base"
+                  style={{
+                    background: 'rgba(10,10,35,0.72)',
+                    boxShadow:
+                      'inset 0 0 0 1px rgba(168,85,247,0.35), 0 8px 32px rgba(0,0,0,0.45)',
+                  }}
+                >
+                  테이블에 착석하는 중…
+                </p>
+              </div>
+            )}
 
             {statusMessage && (
               <div className="pointer-events-none absolute left-0 right-0 top-20 z-10 flex justify-center px-4">
@@ -852,7 +908,7 @@ export default function LexioOnline() {
                       <span className="text-purple-300/75">
                         ({sceneBundle.humanPlayer.hand.length}장)
                       </span>
-                      {isMyTurn && gameView.phase === 'playing' && (
+                      {isMyTurn && gameView.phase === 'playing' && gameReady && (
                         <span
                           className="ml-1 rounded-full px-2.5 py-0.5 text-xs tracking-[0.25em] uppercase sm:text-sm"
                           style={{
@@ -928,7 +984,7 @@ export default function LexioOnline() {
                     </div>
                   ) : (
                     <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-3">
-                      {isMyTurn && gameView.phase === 'playing' && (
+                      {isMyTurn && gameView.phase === 'playing' && gameReady && (
                         <>
                           <button
                             type="button"
