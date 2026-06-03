@@ -1,7 +1,7 @@
 ---
 description: >-
   Git commit when the user asks (커밋해줘, 커밋, commit, git commit). English
-  commit message; Korean detailed summary. Follow the git-commit skill.
+  subject line; Korean commit body and detailed summary. Follow the git-commit skill.
 alwaysApply: false
 ---
 
@@ -10,6 +10,6 @@ alwaysApply: false
 When the user asks to commit (e.g. **커밋해줘**):
 
 1. Follow the **git-commit** skill (`.cursor/skills/git-commit/SKILL.md`).
-2. **Commit message in English**; **detailed summary in Korean (한국어)** after the commit.
+2. **Subject in English**; **body & summary in Korean bullet list** (짧고 쉬운 말, `습니다` X).
 3. Basic rules: explicit request only, `git status` + `git diff` + `git log` first, no secrets, no destructive git unless asked.
 4. Do not push unless asked.
