@@ -172,13 +172,33 @@ function LexioTile3D({
   /** 앞줄 돌 메시 ref — 뒤줄 Html occlude 대상 등록용 */
   stoneMeshRef?: React.RefObject<THREE.Mesh | null>;
 }) {
+  const groupRef = useRef<THREE.Group>(null);
+  const liftSmoothed = useRef(0);
   const [hovered, setHovered] = useState(false);
   const interactive = !!onClick;
-  const lift = selected
+  const targetLift = selected
     ? SELECT_LIFT
     : hovered && interactive
       ? HOVER_LIFT
       : 0;
+
+  useLayoutEffect(() => {
+    liftSmoothed.current = 0;
+    if (groupRef.current) {
+      groupRef.current.position.set(position[0], position[1], position[2]);
+    }
+  }, [tile.id, position[0], position[1], position[2]]);
+
+  useFrame((_, delta) => {
+    if (!groupRef.current) return;
+    const t = 1 - Math.exp(-14 * delta);
+    liftSmoothed.current += (targetLift - liftSmoothed.current) * t;
+    groupRef.current.position.set(
+      position[0],
+      position[1] + liftSmoothed.current,
+      position[2],
+    );
+  });
 
   const showFaceHover = facePointerHover;
   const cardHovered = showFaceHover && hovered;
@@ -187,9 +207,17 @@ function LexioTile3D({
   const meshOrder = TILE_RENDER_ORDER[rowLayer];
   const htmlZ = TILE_HTML_Z[rowLayer];
 
+  const setHover = (next: boolean) => {
+    setHovered(next);
+    if (interactive) {
+      document.body.style.cursor = next ? 'pointer' : 'default';
+    }
+  };
+
   return (
     <group
-      position={[position[0], position[1] + lift, position[2]]}
+      ref={groupRef}
+      position={position}
       rotation={rotation ?? [0, 0, 0]}
       renderOrder={meshOrder}
     >
@@ -226,29 +254,18 @@ function LexioTile3D({
           transparent={dimmed}
         />
       </mesh>
-      {showFaceHover && (
+      {showFaceHover && !interactive && (
         <mesh
           position={[0, 0, FACE_Z + 0.012]}
-          onClick={
-            interactive
-              ? (e) => {
-                  e.stopPropagation();
-                  onClick?.();
-                }
-              : undefined
-          }
           onPointerOver={(e) => {
             e.stopPropagation();
-            setHovered(true);
-            if (interactive) document.body.style.cursor = 'pointer';
+            setHover(true);
           }}
-          onPointerOut={() => {
-            setHovered(false);
-            if (interactive) document.body.style.cursor = 'default';
+          onPointerOut={(e) => {
+            e.stopPropagation();
+            setHover(false);
           }}
         >
-          {/** 카드 면 + 여유로 hit-area 확장. 가로는 인접 카드 gap=TILE_W*1.1을 꽉 채우고,
-           *   세로는 카드 위/아래로 넉넉히 확보해 가장자리 클릭도 잡히게 함. */}
           <planeGeometry args={[TILE_W * 1.1, TILE_H * 1.55]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
@@ -267,32 +284,34 @@ function LexioTile3D({
         renderOrder={meshOrder + 1}
         style={{ pointerEvents: 'none' }}
       >
-        {/** 클릭 가능한 손패(interactive)면 DOM 자체도 pointer 이벤트를 받아
-         *   카드 위 어디서든 선택/해제가 동작한다. 그 외 카드(공개/AI/중앙)는
-         *   기존처럼 모든 descendant에 pointer-events:none을 강제해 mesh로 통과시킨다. */}
         {interactive ? (
-          <div
-            className="cursor-pointer"
-            style={{ pointerEvents: 'auto' }}
-            onClick={(e) => {
-              e.stopPropagation();
-              onClick?.();
-            }}
-            onPointerEnter={() => {
-              setHovered(true);
-              document.body.style.cursor = 'pointer';
-            }}
-            onPointerLeave={() => {
-              setHovered(false);
-              document.body.style.cursor = 'default';
-            }}
-          >
+          /** 손패: DOM hit 영역(110%×155%) — Html·3D 투영 오차 없이 클릭·호버 */
+          <div className="relative w-[3.1rem]">
             <LexioPlayCard
               number={tile.number}
               suit={lexioColorToSuit(tile.color)}
               small
+              embed3D
               isHovered={cardHovered}
               numberTwoHalo={numberTwoHalo}
+            />
+            <button
+              type="button"
+              aria-label={`패 ${tile.number} ${tile.color} 선택`}
+              className="absolute cursor-pointer border-0 bg-transparent p-0"
+              style={{
+                pointerEvents: 'auto',
+                left: '-5%',
+                top: '-27.5%',
+                width: '110%',
+                height: '155%',
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onClick?.();
+              }}
+              onPointerEnter={() => setHover(true)}
+              onPointerLeave={() => setHover(false)}
             />
           </div>
         ) : (
@@ -301,6 +320,7 @@ function LexioTile3D({
               number={tile.number}
               suit={lexioColorToSuit(tile.color)}
               small
+              embed3D
               isHovered={cardHovered}
               numberTwoHalo={numberTwoHalo}
             />

@@ -74,6 +74,29 @@
   animation: lexioModeSplitLineRise 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
+/* Touch / primary pointer without hover: always show offline|online split */
+@media (hover: none) {
+  .lexio-mode-card .lexio-mode-default {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .lexio-mode-card .lexio-mode-choices {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .lexio-mode-card .lexio-mode-split-line {
+    animation: lexioModeSplitLineRise 0.42s cubic-bezier(0.22, 1, 0.36, 1)
+      forwards;
+  }
+
+  .lexio-mode-zone-offline:active,
+  .lexio-mode-zone-online:active {
+    background: rgba(0, 0, 0, 0.14);
+  }
+}
+
 /* clip-path set in JS from card size (see LexioHomeCard) */
 .lexio-mode-zone-offline,
 .lexio-mode-zone-online {

@@ -96,6 +96,8 @@ type LexioPlayCardProps = {
   rulesTight?: boolean;
   /** 3D 등에서 메시 호버와 동기화할 때 true */
   isHovered?: boolean;
+  /** 3D 씬: lift는 부모 그룹이 담당 — CSS translate·hover: 미사용 */
+  embed3D?: boolean;
   /** 판 종료 공개 시 숫자 2 패 후광 */
   numberTwoHalo?: boolean;
 };
@@ -111,6 +113,7 @@ export function LexioPlayCard({
   small = false,
   rulesTight = false,
   isHovered = false,
+  embed3D = false,
   numberTwoHalo = false,
 }: LexioPlayCardProps) {
   const { Icon, glyph, label, iconClass, glyphClass, numberClass } =
@@ -124,10 +127,21 @@ export function LexioPlayCard({
 
   const hoverLift =
     'transition-[transform,box-shadow,border-color] duration-200 ease-out will-change-transform';
-  const hoverCss =
+  const hoverCss2D =
     'hover:-translate-y-1 hover:scale-[1.05] hover:border-purple-400/45 hover:shadow-[0_14px_32px_-10px_rgba(88,28,135,0.55),inset_0_1px_0_rgba(255,255,255,0.12)]';
-  const forcedHover =
+  const forcedHover2D =
     '-translate-y-1 scale-[1.05] border-purple-400/55 shadow-[0_14px_32px_-10px_rgba(88,28,135,0.55),inset_0_1px_0_rgba(255,255,255,0.12)]';
+  /** 3D: Y 이동은 LexioTile3D 그룹 — 여기선 확대·테두리만 */
+  const forcedHover3D =
+    'scale-[1.03] border-purple-400/55 shadow-[0_14px_32px_-10px_rgba(88,28,135,0.55),inset_0_1px_0_rgba(255,255,255,0.12)]';
+
+  const hoverStyle = embed3D
+    ? isHovered
+      ? forcedHover3D
+      : ''
+    : isHovered
+      ? forcedHover2D
+      : hoverCss2D;
 
   const twoHalo =
     numberTwoHalo &&
@@ -147,7 +161,7 @@ export function LexioPlayCard({
             : 'w-[3.1rem] px-1.5 py-1'
           : 'w-[4rem] px-2 py-1.5',
         hoverLift,
-        isHovered ? forcedHover : hoverCss,
+        hoverStyle,
         twoHalo,
         className,
       ]
