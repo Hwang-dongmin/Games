@@ -36,16 +36,10 @@ import {
 import LexioFirstPersonScene from './lexio/LexioFirstPersonScene';
 import LexioOfflineSetup from './lexio/LexioOfflineSetup';
 import { LexioPlayCard } from '../components/lexio/LexioPlayCard';
-
-type DiscardPlacement = {
-  key: string;
-  x: number;
-  y: number;
-  z: number;
-  rx: number;
-  ry: number;
-  rz: number;
-};
+import {
+  buildDiscardPlacements,
+  type DiscardPlacement,
+} from '../utils/lexioDiscardLayout';
 
 type GamePhase = 'setup' | 'playing' | 'finished';
 type UiPlayer = LexioPlayer;
@@ -83,16 +77,6 @@ const MAX_SESSION_ROUNDS = 20;
 
 /** 테이블 위(+Y)에서 볼 때 반시계방향 차례: 남(0)→서(1)→북서(3)→북동(4)→동(2) */
 const PLAYER_TURN_ORDER = [0, 1, 3, 4, 2] as const;
-
-function mulberry32(seed: number) {
-  let a = seed >>> 0;
-  return () => {
-    a += 0x6d2b79f5;
-    let t = Math.imul(a ^ (a >>> 15), a | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
 
 function nextTurnPlayerIndex(
   currentIdx: number,
@@ -291,27 +275,10 @@ export default function Lexio() {
     if (tiles.length === 0) return;
     discardSeqRef.current += 1;
     const seq = discardSeqRef.current;
-    setDiscardPlacements((prev) => {
-      const rnd = mulberry32(seq * 2654435761 + prev.length);
-      const baseLayer = prev.length;
-      const additions: DiscardPlacement[] = tiles.map((t, i) => {
-        const angle = rnd() * Math.PI * 2;
-        const radius = 0.22 + rnd() * 0.48;
-        const spreadZ = -0.26 + Math.sin(angle) * radius * 0.82;
-        const spreadX = Math.cos(angle) * radius * 0.88;
-        const stackLift = (baseLayer + i) * 0.008;
-        return {
-          key: `discard-${t.id}-s${seq}-i${i}`,
-          x: spreadX + (rnd() - 0.5) * 0.07,
-          y: 0.535 + stackLift + rnd() * 0.018,
-          z: spreadZ + (rnd() - 0.5) * 0.09,
-          rx: -0.12 + (rnd() - 0.5) * 0.55,
-          ry: rnd() * Math.PI * 2,
-          rz: (rnd() - 0.5) * 0.5,
-        };
-      });
-      return [...prev, ...additions];
-    });
+    setDiscardPlacements((prev) => [
+      ...prev,
+      ...buildDiscardPlacements(tiles, seq, prev),
+    ]);
   }, []);
 
   /** 새 판만 시작 (세션 코인·완료 판 수는 유지) */

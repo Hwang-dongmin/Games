@@ -10,6 +10,12 @@ import {
   findStarterIndex,
   roundCoinForHand,
 } from './lexio';
+import {
+  buildDiscardPlacements,
+  type DiscardPlacement,
+} from './lexioDiscardLayout';
+
+export type { DiscardPlacement };
 
 export type OnlineLexioPlayer = {
   seat: number;
@@ -43,16 +49,6 @@ export function replacePlayerWithAI(
   );
   return { state: { ...state, players }, nickname: player.name };
 }
-
-export type DiscardPlacement = {
-  key: string;
-  x: number;
-  y: number;
-  z: number;
-  rx: number;
-  ry: number;
-  rz: number;
-};
 
 export type LastRoundCoinRow = {
   playerId: number;
@@ -153,37 +149,13 @@ export function startNewRound(state: LexioGameState): LexioGameState {
   };
 }
 
-function mulberry32(seed: number) {
-  let a = seed >>> 0;
-  return () => {
-    a += 0x6d2b79f5;
-    let t = Math.imul(a ^ (a >>> 15), a | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
 function appendDiscardTiles(
   state: LexioGameState,
   tiles: LexioTile[],
 ): DiscardPlacement[] {
   if (tiles.length === 0) return state.discardPlacements;
   const seq = state.discardSeq + 1;
-  const rnd = mulberry32(seq * 2654435761 + state.discardPlacements.length);
-  const baseLayer = state.discardPlacements.length;
-  const additions: DiscardPlacement[] = tiles.map((t, i) => {
-    const angle = rnd() * Math.PI * 2;
-    const radius = 0.22 + rnd() * 0.48;
-    return {
-      key: `discard-${t.id}-s${seq}-i${i}`,
-      x: Math.cos(angle) * radius * 0.88 + (rnd() - 0.5) * 0.07,
-      y: 0.535 + (baseLayer + i) * 0.008 + rnd() * 0.018,
-      z: -0.26 + Math.sin(angle) * radius * 0.82 + (rnd() - 0.5) * 0.09,
-      rx: -0.12 + (rnd() - 0.5) * 0.55,
-      ry: rnd() * Math.PI * 2,
-      rz: (rnd() - 0.5) * 0.5,
-    };
-  });
+  const additions = buildDiscardPlacements(tiles, seq, state.discardPlacements);
   return [...state.discardPlacements, ...additions];
 }
 
