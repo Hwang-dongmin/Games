@@ -100,7 +100,8 @@ export default function LexioVictoryFireworks({ active }: LexioVictoryFireworksP
     let launchTimer = 0;
     let startTime = 0;
     let lastTime = 0;
-    const DURATION_MS = 8000;
+    let canLaunch = true;
+    const LAUNCH_DURATION_MS = 15000;
 
     const launchRocket = () => {
       rockets.push({
@@ -124,17 +125,18 @@ export default function LexioVictoryFireworks({ active }: LexioVictoryFireworksP
       const dt = Math.min(timestamp - lastTime, 32);
       lastTime = timestamp;
 
-      if (timestamp - startTime > DURATION_MS) {
-        ctx.clearRect(0, 0, width, height);
-        return;
+      if (canLaunch && timestamp - startTime >= LAUNCH_DURATION_MS) {
+        canLaunch = false;
       }
 
       ctx.clearRect(0, 0, width, height);
 
-      launchTimer += dt;
-      if (launchTimer > 420 + Math.random() * 380) {
-        launchRocket();
-        launchTimer = 0;
+      if (canLaunch) {
+        launchTimer += dt;
+        if (launchTimer > 420 + Math.random() * 380) {
+          launchRocket();
+          launchTimer = 0;
+        }
       }
 
       for (let i = rockets.length - 1; i >= 0; i--) {
@@ -185,6 +187,10 @@ export default function LexioVictoryFireworks({ active }: LexioVictoryFireworksP
         ctx.fill();
       }
       ctx.globalAlpha = 1;
+
+      if (!canLaunch && rockets.length === 0 && particles.length === 0) {
+        return;
+      }
 
       frameRef.current = requestAnimationFrame(tick);
     };
