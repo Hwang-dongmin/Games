@@ -16,7 +16,6 @@ const TILE_W = 0.212;
 const TILE_H = TILE_W * (89 / 57);
 const TILE_T = 0.092;
 const TILT_BACK = -0.18;
-const CENTER_PLAY_X = 0;
 const CENTER_PLAY_Z = LEXIO_CENTER_PLAY_TABLE_Z;
 const CENTER_PLAY_GAP = TILE_W * 1.1;
 const MAX_CENTER_TILES = 5;
@@ -27,10 +26,24 @@ const DISCARD_TILE_W = TILE_W * 0.88;
 const DISCARD_TILE_H = TILE_H * 0.88;
 const DISCARD_XZ_REACH =
   Math.hypot(DISCARD_TILE_W / 2, DISCARD_TILE_H / 2) * 1.12;
-const DISCARD_SPREAD_DIST = DISCARD_XZ_REACH * 1.55;
-const DISCARD_LEAN_DIST = DISCARD_TILE_W * 0.5;
+const DISCARD_SPREAD_DIST = DISCARD_XZ_REACH * 1.92;
 const KEEP_OUT_EXTRA = 0.1;
-const STACK_STEP_Y = TILE_T * 0.72;
+const TABLE_X_LIMIT = 1.12;
+const TABLE_Z_MIN = -1.05;
+
+/** LexioFirstPersonScene OpponentSeat — 손패가 테이블 위에 놓이는 위치 */
+const OPPONENT_HAND_Z = -0.92;
+const OPPONENT_BACK_GAP = TILE_W * 0.78;
+const OPPONENT_MAX_HAND = 14;
+const OPPONENT_HAND_HALF_SPREAD =
+  ((OPPONENT_MAX_HAND - 1) * OPPONENT_BACK_GAP) / 2;
+const OPPONENT_SEATS: ReadonlyArray<{ x: number; z: number }> = [
+  { x: 0, z: -2.55 },
+  { x: -2.78, z: 0.44 },
+  { x: 2.78, z: 0.44 },
+  { x: -1.72, z: -2.52 },
+  { x: 1.72, z: -2.52 },
+];
 
 type KeepOutRect = {
   minX: number;
@@ -46,7 +59,7 @@ type DiscardZone = {
   maxZ: number;
 };
 
-type DiscardPose = 'flat' | 'stand' | 'lean';
+type DiscardPose = 'flat' | 'stand';
 
 /** CenterPlay3D 최대 5장 */
 function computeCenterPlayKeepOut(): KeepOutRect {
@@ -86,6 +99,25 @@ function computeCenterPlayKeepOut(): KeepOutRect {
 
 const CENTER_PLAY_KEEP_OUT = computeCenterPlayKeepOut();
 
+function computeOpponentHandKeepOuts(): KeepOutRect[] {
+  const tileReach = DISCARD_TILE_W * 0.55 + 0.14;
+  const margin = OPPONENT_HAND_HALF_SPREAD + tileReach;
+
+  return OPPONENT_SEATS.map(({ x: sx, z: sz }) => {
+    const cardYaw = Math.atan2(sx, sz);
+    const cx = sx - OPPONENT_HAND_Z * Math.sin(cardYaw);
+    const cz = sz - OPPONENT_HAND_Z * Math.cos(cardYaw);
+    return {
+      minX: cx - margin,
+      maxX: cx + margin,
+      minZ: cz - margin,
+      maxZ: cz + margin,
+    };
+  });
+}
+
+const OPPONENT_HAND_KEEP_OUTS = computeOpponentHandKeepOuts();
+
 /** 제출 패 keep-out 바로 뒤까지 (중앙 Z가 커질수록 값이 커져 뒤쪽 버림 면적 확대) */
 const ZONE_MAX_Z =
   CENTER_PLAY_KEEP_OUT.minZ - DISCARD_XZ_REACH - 0.006;
@@ -95,10 +127,11 @@ const ZONE_CENTER_BACK_MAX_Z =
   CENTER_PLAY_KEEP_OUT.minZ - DISCARD_XZ_REACH - 0.04;
 
 const DISCARD_ZONES: DiscardZone[] = [
-  { minX: -1.16, maxX: -1.088, minZ: -1.1, maxZ: ZONE_MAX_Z },
-  { minX: 1.088, maxX: 1.16, minZ: -1.1, maxZ: ZONE_MAX_Z },
-  { minX: -0.76, maxX: 0.76, minZ: -1.1, maxZ: ZONE_MAX_Z },
-  { minX: -0.58, maxX: 0.58, minZ: -1.1, maxZ: ZONE_CENTER_BACK_MAX_Z },
+  { minX: -0.58, maxX: 0.58, minZ: -1.05, maxZ: ZONE_CENTER_BACK_MAX_Z },
+  { minX: -1.1, maxX: -0.62, minZ: -1.05, maxZ: -0.42 },
+  { minX: 0.62, maxX: 1.1, minZ: -1.05, maxZ: -0.42 },
+  { minX: -1.1, maxX: -0.72, minZ: -1.05, maxZ: ZONE_MAX_Z },
+  { minX: 0.72, maxX: 1.1, minZ: -1.05, maxZ: ZONE_MAX_Z },
 ];
 
 function mulberry32(seed: number) {
@@ -129,13 +162,15 @@ function overlapsCenterPlay(x: number, z: number): boolean {
   return overlapsRect(x, z, DISCARD_XZ_REACH, CENTER_PLAY_KEEP_OUT);
 }
 
-function xzReachForPose(rx: number): number {
-  const t = Math.min(
-    1,
-    Math.abs(rx + Math.PI / 2) / (Math.PI / 2 - 0.12),
-  );
-  const standing = DISCARD_TILE_W * 0.52;
-  return standing + (DISCARD_XZ_REACH - standing) * t;
+function overlapsOpponentHands(x: number, z: number): boolean {
+  for (const rect of OPPONENT_HAND_KEEP_OUTS) {
+    if (overlapsRect(x, z, DISCARD_XZ_REACH, rect)) return true;
+  }
+  return false;
+}
+
+function overlapsBlockedAreas(x: number, z: number): boolean {
+  return overlapsCenterPlay(x, z) || overlapsOpponentHands(x, z);
 }
 
 function overlapsOtherDiscards(
@@ -143,11 +178,9 @@ function overlapsOtherDiscards(
   z: number,
   existing: ReadonlyArray<Pick<DiscardPlacement, 'x' | 'z' | 'key'>>,
   minDist: number,
-  exceptKey?: string,
 ): boolean {
   const d2 = minDist * minDist;
   for (const p of existing) {
-    if (exceptKey && p.key === exceptKey) continue;
     const dx = x - p.x;
     const dz = z - p.z;
     if (dx * dx + dz * dz < d2) return true;
@@ -155,19 +188,34 @@ function overlapsOtherDiscards(
   return false;
 }
 
-function stackLayerAt(
+function pickRandomZone(rnd: () => number): DiscardZone {
+  return DISCARD_ZONES[Math.floor(rnd() * DISCARD_ZONES.length)];
+}
+
+function sampleSpreadXZ(rnd: () => number): [number, number] {
+  if (rnd() < 0.55) {
+    const zone = pickRandomZone(rnd);
+    return sampleInZone(zone, rnd);
+  }
+  const x = (rnd() * 2 - 1) * TABLE_X_LIMIT;
+  const z = TABLE_Z_MIN + rnd() * (ZONE_MAX_Z - TABLE_Z_MIN);
+  return [x, z];
+}
+
+function minDistToDiscardsSq(
   x: number,
   z: number,
-  existing: ReadonlyArray<Pick<DiscardPlacement, 'x' | 'z' | 'y'>>,
+  existing: ReadonlyArray<Pick<DiscardPlacement, 'x' | 'z'>>,
 ): number {
-  const r2 = (DISCARD_SPREAD_DIST * 0.65) ** 2;
-  let layer = 0;
+  if (existing.length === 0) return Infinity;
+  let best = Infinity;
   for (const p of existing) {
     const dx = x - p.x;
     const dz = z - p.z;
-    if (dx * dx + dz * dz < r2) layer += 1;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < best) best = d2;
   }
-  return layer;
+  return best;
 }
 
 function sampleInZone(zone: DiscardZone, rnd: () => number): [number, number] {
@@ -180,11 +228,27 @@ function spiralFallback(
   index: number,
   rnd: () => number,
 ): [number, number] {
-  const t = index * 2.399963 + rnd() * 0.4;
-  const ring = Math.floor(index / 9);
-  const x = Math.cos(t) * Math.min(0.62, 0.48 + ring * 0.035);
-  const z = -0.92 - ring * 0.035 + Math.sin(t) * 0.12;
-  return [x, z];
+  const t = index * 2.399963 + rnd() * 0.55;
+  const ring = Math.floor(index / 7);
+  const radius = Math.min(1.05, 0.38 + ring * 0.09);
+  const x = Math.cos(t) * radius;
+  const z = TABLE_Z_MIN + 0.18 + ring * 0.07 + (Math.sin(t) + 1) * 0.22;
+  return [x, Math.min(ZONE_MAX_Z, z)];
+}
+
+function isValidDiscardXZ(
+  x: number,
+  z: number,
+  existing: ReadonlyArray<Pick<DiscardPlacement, 'x' | 'z' | 'key'>>,
+  minDist: number,
+): boolean {
+  if (Math.abs(x) > TABLE_X_LIMIT || z < TABLE_Z_MIN || z > ZONE_MAX_Z) {
+    return false;
+  }
+  return (
+    !overlapsBlockedAreas(x, z) &&
+    !overlapsOtherDiscards(x, z, existing, minDist)
+  );
 }
 
 function pickDiscardXZ(
@@ -192,23 +256,34 @@ function pickDiscardXZ(
   existing: ReadonlyArray<Pick<DiscardPlacement, 'x' | 'z' | 'key'>>,
   globalIndex: number,
 ): [number, number] {
-  for (let attempt = 0; attempt < 72; attempt++) {
-    const zone = DISCARD_ZONES[Math.floor(rnd() * DISCARD_ZONES.length)];
-    const [x, z] = sampleInZone(zone, rnd);
-    if (
-      !overlapsCenterPlay(x, z) &&
-      !overlapsOtherDiscards(x, z, existing, DISCARD_SPREAD_DIST)
-    ) {
-      return [x, z];
+  let best: [number, number] | null = null;
+  let bestScore = -1;
+
+  for (let attempt = 0; attempt < 96; attempt++) {
+    const [x, z] = sampleSpreadXZ(rnd);
+    if (!isValidDiscardXZ(x, z, existing, DISCARD_SPREAD_DIST)) continue;
+    const score = minDistToDiscardsSq(x, z, existing);
+    if (score > bestScore) {
+      bestScore = score;
+      best = [x, z];
     }
   }
+  if (best) return best;
 
-  for (let attempt = 0; attempt < 36; attempt++) {
+  for (let attempt = 0; attempt < 48; attempt++) {
     const [x, z] = spiralFallback(globalIndex + attempt, rnd);
-    if (
-      !overlapsCenterPlay(x, z) &&
-      !overlapsOtherDiscards(x, z, existing, DISCARD_SPREAD_DIST)
-    ) {
+    if (!isValidDiscardXZ(x, z, existing, DISCARD_SPREAD_DIST * 0.82)) continue;
+    const score = minDistToDiscardsSq(x, z, existing);
+    if (score > bestScore) {
+      bestScore = score;
+      best = [x, z];
+    }
+  }
+  if (best) return best;
+
+  for (let attempt = 0; attempt < 32; attempt++) {
+    const [x, z] = sampleSpreadXZ(rnd);
+    if (isValidDiscardXZ(x, z, existing, DISCARD_SPREAD_DIST * 0.68)) {
       return [x, z];
     }
   }
@@ -217,37 +292,20 @@ function pickDiscardXZ(
   return sampleInZone(zone, rnd);
 }
 
-function pickPose(rnd: () => number, canLean: boolean): DiscardPose {
-  const r = rnd();
-  if (canLean && r < 0.36) return 'lean';
-  if (r < 0.68) return 'flat';
-  return 'stand';
+function pickPose(rnd: () => number): DiscardPose {
+  return rnd() < 0.84 ? 'flat' : 'stand';
 }
 
-function pickLeanAnchor(
-  placed: DiscardPlacement[],
+function sampleRotationForPose(
+  pose: DiscardPose,
   rnd: () => number,
-): DiscardPlacement | null {
-  if (placed.length === 0) return null;
-  const pool = placed.filter((p) => !overlapsCenterPlay(p.x, p.z));
-  if (pool.length === 0) return placed[Math.floor(rnd() * placed.length)];
-  return pool[Math.floor(rnd() * pool.length)];
-}
-
-function positionLeanAgainst(
-  anchor: DiscardPlacement,
-  rnd: () => number,
-): { x: number; z: number; ry: number } {
-  const awayX = anchor.x - CENTER_PLAY_X;
-  const awayZ = anchor.z - CENTER_PLAY_Z;
-  const base = Math.atan2(awayZ, awayX);
-  const angle = base + (rnd() - 0.5) * 1.15;
-  const dist = DISCARD_LEAN_DIST + rnd() * 0.07;
-  return {
-    x: anchor.x + Math.cos(angle) * dist,
-    z: anchor.z + Math.sin(angle) * dist,
-    ry: angle + Math.PI / 2 + (rnd() - 0.5) * 0.4,
-  };
+): { rx: number; ry: number; rz: number } {
+  const spin = rnd() * Math.PI * 2;
+  if (pose === 'flat') {
+    // ry 대신 rz — XYZ 오일러에서 rx=-π/2 일 때 ry는 기울어짐(gimbal lock)
+    return { rx: -Math.PI / 2, ry: 0, rz: spin };
+  }
+  return { rx: 0, ry: spin, rz: 0 };
 }
 
 /** Three.js Euler 'XYZ' */
@@ -300,84 +358,14 @@ function discardYExtents(
   return { min: ymin, max: ymax };
 }
 
-function sampleRotationForPose(
-  pose: DiscardPose,
-  rnd: () => number,
-  leanRy?: number,
-): { rx: number; ry: number; rz: number } {
-  switch (pose) {
-    case 'flat':
-      return {
-        rx: -1.18 - rnd() * rnd() * 0.34,
-        ry: rnd() * Math.PI * 2,
-        rz: (rnd() - 0.5) * 0.4,
-      };
-    case 'stand':
-      return {
-        rx: TILT_BACK - 0.06 - rnd() * 0.14,
-        ry: rnd() * Math.PI * 2,
-        rz: (rnd() - 0.5) * 0.2,
-      };
-    case 'lean':
-      return {
-        rx: -0.38 - rnd() * 0.52,
-        ry: leanRy ?? rnd() * Math.PI * 2,
-        rz: (rnd() - 0.5) * 0.34,
-      };
-  }
-}
-
 function computeDiscardY(
   rx: number,
   ry: number,
   rz: number,
-  layer: number,
   rnd: () => number,
-  anchor?: DiscardPlacement,
 ): number {
   const ext = discardYExtents(rx, ry, rz);
-  if (anchor) {
-    const aExt = discardYExtents(anchor.rx, anchor.ry, anchor.rz);
-    const gap = 0.003 + rnd() * 0.008;
-    return anchor.y + aExt.max - ext.min + gap;
-  }
-  const lift = -ext.min;
-  return (
-    TABLE_TOP_Y +
-    TABLE_SURFACE_EPS +
-    lift +
-    layer * STACK_STEP_Y +
-    rnd() * 0.003
-  );
-}
-
-function tryLeanPlacement(
-  anchor: DiscardPlacement,
-  rnd: () => number,
-  existing: DiscardPlacement[],
-): {
-  x: number;
-  z: number;
-  rx: number;
-  ry: number;
-  rz: number;
-} | null {
-  for (let attempt = 0; attempt < 28; attempt++) {
-    const { x, z, ry } = positionLeanAgainst(anchor, rnd);
-    const reach = xzReachForPose(-0.55);
-    if (
-      overlapsRect(x, z, reach, CENTER_PLAY_KEEP_OUT) ||
-      overlapsOtherDiscards(x, z, existing, DISCARD_LEAN_DIST * 0.85, anchor.key)
-    ) {
-      continue;
-    }
-    const rot = sampleRotationForPose('lean', rnd, ry);
-    if (overlapsRect(x, z, xzReachForPose(rot.rx), CENTER_PLAY_KEEP_OUT)) {
-      continue;
-    }
-    return { x, z, ...rot };
-  }
-  return null;
+  return TABLE_TOP_Y + TABLE_SURFACE_EPS - ext.min + rnd() * 0.002;
 }
 
 export function buildDiscardPlacements(
@@ -392,37 +380,10 @@ export function buildDiscardPlacements(
   for (let i = 0; i < tiles.length; i++) {
     const t = tiles[i];
     const globalIndex = placed.length;
-    const canLean = placed.length > 0;
-    let pose = pickPose(rnd, canLean);
-    let anchor: DiscardPlacement | undefined;
-    let x = 0;
-    let z = 0;
-    let rx = 0;
-    let ry = 0;
-    let rz = 0;
-
-    if (pose === 'lean') {
-      const leanAnchor = pickLeanAnchor(placed, rnd);
-      if (leanAnchor) {
-        const lean = tryLeanPlacement(leanAnchor, rnd, placed);
-        if (lean) {
-          anchor = leanAnchor;
-          ({ x, z, rx, ry, rz } = lean);
-        } else {
-          pose = rnd() < 0.55 ? 'flat' : 'stand';
-        }
-      } else {
-        pose = rnd() < 0.55 ? 'flat' : 'stand';
-      }
-    }
-
-    if (!anchor) {
-      [x, z] = pickDiscardXZ(rnd, placed, globalIndex);
-      ({ rx, ry, rz } = sampleRotationForPose(pose, rnd));
-    }
-
-    const layer = anchor ? 0 : stackLayerAt(x, z, placed);
-    const y = computeDiscardY(rx, ry, rz, layer, rnd, anchor);
+    const pose = pickPose(rnd);
+    const [x, z] = pickDiscardXZ(rnd, placed, globalIndex);
+    const { rx, ry, rz } = sampleRotationForPose(pose, rnd);
+    const y = computeDiscardY(rx, ry, rz, rnd);
 
     const placement: DiscardPlacement = {
       key: `discard-${t.id}-s${seq}-i${i}`,

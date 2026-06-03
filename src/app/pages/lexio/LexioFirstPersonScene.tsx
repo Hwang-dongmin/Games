@@ -561,24 +561,42 @@ function DiscardFaceDownTile({
 }: {
   placement: LexioDiscardPlacement;
 }) {
+  const isFlat = placement.rx < -1.4;
+  const spin = isFlat
+    ? Math.abs(placement.rz) > 0.001
+      ? placement.rz
+      : placement.ry
+    : placement.ry;
+
   return (
-    <group
-      position={[placement.x, placement.y, placement.z]}
-      rotation={[placement.rx, placement.ry, placement.rz]}
-    >
-      <mesh
-        castShadow
-        receiveShadow
-        raycast={() => null}
-        geometry={LEXIO_DISCARD_ROUNDED_GEOM}
-      >
-        <meshStandardMaterial
-          color="#030303"
-          roughness={0.94}
-          metalness={0.02}
-        />
-      </mesh>
+    <group position={[placement.x, placement.y, placement.z]}>
+      {isFlat ? (
+        <group rotation={[-Math.PI / 2, 0, spin]}>
+          <DiscardFaceDownMesh />
+        </group>
+      ) : (
+        <group rotation={[0, spin, 0]}>
+          <DiscardFaceDownMesh />
+        </group>
+      )}
     </group>
+  );
+}
+
+function DiscardFaceDownMesh() {
+  return (
+    <mesh
+      castShadow
+      receiveShadow
+      raycast={() => null}
+      geometry={LEXIO_DISCARD_ROUNDED_GEOM}
+    >
+      <meshStandardMaterial
+        color="#030303"
+        roughness={0.94}
+        metalness={0.02}
+      />
+    </mesh>
   );
 }
 
