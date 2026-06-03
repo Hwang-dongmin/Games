@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Layers, Users } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
+import { useTouchPrimary } from './ui/use-mobile';
 
 const LEXIO_IMAGE =
   'https://images.unsplash.com/photo-1606503153255-59d8b8b82176?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080';
@@ -23,6 +24,8 @@ export default function LexioHomeCard() {
   const cardRef = useRef<HTMLDivElement>(null);
   const offlineRef = useRef<HTMLAnchorElement>(null);
   const onlineRef = useRef<HTMLAnchorElement>(null);
+  const touchPrimary = useTouchPrimary();
+  const [revealed, setRevealed] = useState(false);
 
   useLayoutEffect(() => {
     const card = cardRef.current;
@@ -47,13 +50,40 @@ export default function LexioHomeCard() {
     return () => ro.disconnect();
   }, []);
 
+  useEffect(() => {
+    if (!touchPrimary) setRevealed(false);
+  }, [touchPrimary]);
+
+  useEffect(() => {
+    if (!touchPrimary || !revealed) return;
+    const onPointerDown = (e: PointerEvent) => {
+      const card = cardRef.current;
+      if (card && !card.contains(e.target as Node)) setRevealed(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [touchPrimary, revealed]);
+
+  const showRevealed = touchPrimary && revealed;
+
   return (
     <div
       ref={cardRef}
-      tabIndex={0}
-      className="lexio-mode-card @container group relative min-h-[13.5rem] overflow-hidden rounded-2xl bg-white/10 backdrop-blur-sm border border-white/20 transition-all duration-300 hover:border-white/40 hover:scale-105 hover:shadow-2xl hover:shadow-purple-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-within:border-white/40 focus-within:scale-105 focus-within:shadow-2xl focus-within:shadow-purple-500/50"
+      tabIndex={touchPrimary ? undefined : 0}
+      aria-expanded={touchPrimary ? revealed : undefined}
+      className={[
+        'lexio-mode-card @container group relative min-h-[13.5rem] overflow-hidden rounded-2xl bg-white/10 backdrop-blur-sm border border-white/20 transition-all duration-300 hover:border-white/40 hover:scale-105 hover:shadow-2xl hover:shadow-purple-500/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50 focus-within:border-white/40 focus-within:scale-105 focus-within:shadow-2xl focus-within:shadow-purple-500/50',
+        showRevealed
+          ? 'lexio-mode-card--revealed border-white/40 scale-105 shadow-2xl shadow-purple-500/50'
+          : '',
+      ].join(' ')}
     >
-      <div className="absolute inset-0 opacity-20 transition-opacity group-hover:opacity-30 group-focus-within:opacity-30">
+      <div
+        className={[
+          'absolute inset-0 opacity-20 transition-opacity group-hover:opacity-30 group-focus-within:opacity-30',
+          showRevealed ? 'opacity-30' : '',
+        ].join(' ')}
+      >
         <ImageWithFallback
           src={LEXIO_IMAGE}
           alt="렉시오"
@@ -61,7 +91,12 @@ export default function LexioHomeCard() {
         />
       </div>
 
-      <div className="absolute inset-0 bg-gradient-to-br from-purple-600 to-indigo-700 opacity-60 transition-opacity group-hover:opacity-80 group-focus-within:opacity-80" />
+      <div
+        className={[
+          'absolute inset-0 bg-gradient-to-br from-purple-600 to-indigo-700 opacity-60 transition-opacity group-hover:opacity-80 group-focus-within:opacity-80',
+          showRevealed ? 'opacity-80' : '',
+        ].join(' ')}
+      />
 
       <div className="lexio-mode-split-line pointer-events-none absolute z-30" aria-hidden />
 
@@ -75,7 +110,7 @@ export default function LexioHomeCard() {
             AI와 오프라인 플레이, 또는 친구와 온라인 멀티플레이
           </p>
           <div className="mt-4 flex items-center font-medium text-white">
-            <span>플레이하기</span>
+            <span>{touchPrimary ? '탭하여 모드 선택' : '플레이하기'}</span>
             <svg
               className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1"
               fill="none"
@@ -92,6 +127,15 @@ export default function LexioHomeCard() {
             </svg>
           </div>
         </div>
+
+        {touchPrimary && !revealed && (
+          <button
+            type="button"
+            className="absolute inset-0 z-[15] cursor-pointer rounded-[inherit]"
+            aria-label="오프라인·온라인 선택 보기"
+            onClick={() => setRevealed(true)}
+          />
+        )}
 
         <div className="lexio-mode-choices absolute inset-0 z-20 opacity-0 transition-opacity duration-300 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
           <Link

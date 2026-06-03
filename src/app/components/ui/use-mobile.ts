@@ -19,3 +19,18 @@ export function useIsMobile() {
 
   return !!isMobile;
 }
+
+/** Primary input has no hover (most phones / touch-first) */
+export function useTouchPrimary() {
+  const [touchPrimary, setTouchPrimary] = React.useState(false);
+
+  React.useEffect(() => {
+    const mql = window.matchMedia("(hover: none)");
+    const onChange = () => setTouchPrimary(mql.matches);
+    mql.addEventListener("change", onChange);
+    setTouchPrimary(mql.matches);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+
+  return touchPrimary;
+}
