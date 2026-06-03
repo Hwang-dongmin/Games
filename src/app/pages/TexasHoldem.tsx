@@ -1221,14 +1221,16 @@ export default function TexasHoldem() {
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="relative text-center mb-8 pt-2">
-          <div className="absolute top-0 right-0 flex items-center gap-2">
-            <button
-              onClick={() => setShowRules(true)}
-              className="group inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-white/[0.03] backdrop-blur-sm px-4 py-1.5 text-xs tracking-[0.2em] uppercase text-amber-200/90 hover:text-amber-100 hover:border-amber-300/60 hover:bg-white/[0.06] transition-all"
+          <div className="absolute top-0 left-0">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.03] backdrop-blur-sm px-4 py-1.5 text-xs tracking-[0.25em] uppercase text-slate-200/80 hover:text-white hover:border-white/30 hover:bg-white/[0.06] transition-all"
             >
-              <BookOpen className="w-3.5 h-3.5" />
-              Rules
-            </button>
+              <Home className="w-3.5 h-3.5" />
+              Home
+            </Link>
+          </div>
+          <div className="absolute top-0 right-0 flex flex-col items-end gap-2">
             <button
               onClick={() => {
                 if (gamePhase === 'setup' || gamePhase === 'betting') {
@@ -1241,6 +1243,13 @@ export default function TexasHoldem() {
             >
               <RotateCcw className="w-3.5 h-3.5" />
               New Game
+            </button>
+            <button
+              onClick={() => setShowRules(true)}
+              className="group inline-flex items-center gap-2 rounded-full border border-amber-400/30 bg-white/[0.03] backdrop-blur-sm px-4 py-1.5 text-xs tracking-[0.2em] uppercase text-amber-200/90 hover:text-amber-100 hover:border-amber-300/60 hover:bg-white/[0.06] transition-all"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              Rules
             </button>
           </div>
           <div
@@ -1673,80 +1682,89 @@ export default function TexasHoldem() {
                 )}
               </div>
             </div>
+
+            {/* Setup — player count overlay on table */}
+            {gamePhase === 'setup' && (
+              <div className="absolute inset-0 z-30 flex items-center justify-center p-4 sm:p-6 pointer-events-none">
+                <div
+                  className="absolute inset-3 rounded-[999px] bg-black/45 backdrop-blur-[2px] pointer-events-none"
+                  aria-hidden
+                />
+                <div
+                  className="relative z-10 w-full max-w-md pointer-events-auto rounded-2xl p-6 sm:p-7 backdrop-blur-md"
+                  style={{
+                    background:
+                      'linear-gradient(180deg, rgba(15,23,20,0.88) 0%, rgba(8,14,12,0.94) 100%)',
+                    boxShadow:
+                      '0 0 0 1px rgba(245,158,11,0.25), 0 20px 50px -12px rgba(0,0,0,0.85)',
+                  }}
+                >
+                  <div className="flex flex-col gap-5">
+                    <div className="text-center">
+                      <p className="text-[10px] tracking-[0.4em] text-amber-300/70 uppercase mb-1">
+                        Table Setup
+                      </p>
+                      <h3 className="text-xl sm:text-2xl font-serif tracking-wide text-amber-100">
+                        AI 플레이어 수 선택
+                      </h3>
+                      <p className="text-emerald-100/60 text-xs mt-1.5">
+                        총 플레이어 · <span className="text-amber-200">{numAIPlayers + 1}</span> 명
+                        <span className="opacity-60"> (본인 포함)</span>
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-5 gap-2 sm:gap-2.5 max-w-xs sm:max-w-xl mx-auto">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => {
+                        const selected = numAIPlayers === num;
+                        return (
+                          <button
+                            key={num}
+                            onClick={() => setNumAIPlayers(num)}
+                            className="relative w-11 h-11 sm:w-14 sm:h-14 rounded-full font-serif text-base sm:text-lg transition-all duration-200 hover:-translate-y-0.5"
+                            style={
+                              selected
+                                ? {
+                                    background:
+                                      'radial-gradient(circle at 30% 30%, #fde68a, #b45309 75%)',
+                                    color: '#1c1917',
+                                    boxShadow:
+                                      'inset 0 1px 0 rgba(255,255,255,0.5), 0 8px 18px -6px rgba(245,158,11,0.7), 0 0 0 1px rgba(245,158,11,0.6)',
+                                  }
+                                : {
+                                    background:
+                                      'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
+                                    color: '#e7e5e4',
+                                    boxShadow:
+                                      'inset 0 0 0 1px rgba(245,158,11,0.18)',
+                                  }
+                            }
+                          >
+                            {num}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button
+                      onClick={() => initGame(numAIPlayers)}
+                      className="holdem-shimmer mt-1 mx-auto block rounded-full px-10 py-3.5 text-xs tracking-[0.35em] uppercase font-semibold transition-transform hover:-translate-y-0.5"
+                      style={{
+                        background:
+                          'linear-gradient(180deg, #fde68a 0%, #f59e0b 55%, #b45309 100%)',
+                        color: '#1c1917',
+                        boxShadow:
+                          '0 10px 24px -8px rgba(245,158,11,0.7), inset 0 1px 0 rgba(255,255,255,0.55)',
+                      }}
+                    >
+                      Deal Me In
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Controls */}
-        {gamePhase === 'setup' ? (
-          <div
-            className="rounded-2xl p-7 backdrop-blur-md max-w-2xl mx-auto"
-            style={{
-              background:
-                'linear-gradient(180deg, rgba(15,23,20,0.7) 0%, rgba(8,14,12,0.85) 100%)',
-              boxShadow:
-                '0 0 0 1px rgba(245,158,11,0.2), 0 20px 50px -20px rgba(0,0,0,0.7)',
-            }}
-          >
-            <div className="flex flex-col gap-5">
-              <div className="text-center">
-                <p className="text-[10px] tracking-[0.4em] text-amber-300/70 uppercase mb-1">
-                  Table Setup
-                </p>
-                <h3 className="text-2xl font-serif tracking-wide text-amber-100">
-                  AI 플레이어 수 선택
-                </h3>
-                <p className="text-emerald-100/60 text-xs mt-1.5">
-                  총 플레이어 · <span className="text-amber-200">{numAIPlayers + 1}</span> 명
-                  <span className="opacity-60"> (본인 포함)</span>
-                </p>
-              </div>
-              <div className="grid grid-cols-5 gap-2.5 max-w-xl mx-auto">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => {
-                  const selected = numAIPlayers === num;
-                  return (
-                    <button
-                      key={num}
-                      onClick={() => setNumAIPlayers(num)}
-                      className="relative w-14 h-14 rounded-full font-serif text-lg transition-all duration-200 hover:-translate-y-0.5"
-                      style={
-                        selected
-                          ? {
-                              background:
-                                'radial-gradient(circle at 30% 30%, #fde68a, #b45309 75%)',
-                              color: '#1c1917',
-                              boxShadow:
-                                'inset 0 1px 0 rgba(255,255,255,0.5), 0 8px 18px -6px rgba(245,158,11,0.7), 0 0 0 1px rgba(245,158,11,0.6)',
-                            }
-                          : {
-                              background:
-                                'linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%)',
-                              color: '#e7e5e4',
-                              boxShadow:
-                                'inset 0 0 0 1px rgba(245,158,11,0.18)',
-                            }
-                      }
-                    >
-                      {num}
-                    </button>
-                  );
-                })}
-              </div>
-              <button
-                onClick={() => initGame(numAIPlayers)}
-                className="holdem-shimmer mt-1 mx-auto block rounded-full px-10 py-3.5 text-xs tracking-[0.35em] uppercase font-semibold transition-transform hover:-translate-y-0.5"
-                style={{
-                  background:
-                    'linear-gradient(180deg, #fde68a 0%, #f59e0b 55%, #b45309 100%)',
-                  color: '#1c1917',
-                  boxShadow:
-                    '0 10px 24px -8px rgba(245,158,11,0.7), inset 0 1px 0 rgba(255,255,255,0.55)',
-                }}
-              >
-                Deal Me In
-              </button>
-            </div>
-          </div>
-        ) : gamePhase === 'betting' ? (
+        {gamePhase === 'betting' ? (
           <div className="flex justify-center">
             <button
               onClick={startNewRound}
@@ -1887,17 +1905,6 @@ export default function TexasHoldem() {
             </div>
           )
         )}
-
-        {/* Bottom Actions */}
-        <div className="flex gap-3 justify-center mt-8">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/[0.03] backdrop-blur-sm px-5 py-2 text-xs tracking-[0.25em] uppercase text-slate-200/80 hover:text-white hover:border-white/30 hover:bg-white/[0.06] transition-all"
-          >
-            <Home className="w-3.5 h-3.5" />
-            Home
-          </Link>
-        </div>
 
         {/* Round History */}
         {roundHistory.length > 0 && (
