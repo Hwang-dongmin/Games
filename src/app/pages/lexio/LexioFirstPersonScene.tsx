@@ -8,6 +8,7 @@ import React, {
 } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { layoutHandTiles3D } from '../../utils/lexioHandLayout';
+import { LEXIO_CENTER_PLAY_TABLE_Z } from '../../utils/lexioTableLayout';
 import { Billboard, ContactShadows, Html, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import type {
@@ -235,7 +236,7 @@ const HAND_GROUP_Y = solveGroupYOnTable(
 );
 const CENTER_PLAY_GROUP_Y = solveGroupYOnTable(
   LEXIO_TILE_ROUNDED_GEOM,
-  -0.2,
+  LEXIO_CENTER_PLAY_TABLE_Z,
 );
 /** 테이블에 완전히 눕힌 패(−90°) 그룹 Y */
 const TILE_FLAT_Y =
@@ -249,7 +250,8 @@ const TILE_FLAT_Y =
 
 const OPPONENT_BACK_W = TILE_W * 0.6;
 const OPPONENT_BACK_H = TILE_H * 0.6;
-const OPPONENT_HAND_Z = -1.45;
+/** 좌석→테이블 안쪽 오프셋 (작을수록 플레이어 시점에 가깝게) */
+const OPPONENT_HAND_Z = -0.92;
 const OPPONENT_BACK_GEOM = getRoundedTileGeometry(
   OPPONENT_BACK_W,
   OPPONENT_BACK_H,
@@ -873,7 +875,7 @@ function OpponentSeat({
   // 좌석 그룹은 회전 없이 seatPosition에 놓여 있으므로,
   // 공개된 카드의 로컬 오프셋이 곧 (월드 위치 - seatPosition)이 된다.
   // cardYaw는 -Z 로컬 방향을 테이블 중앙으로 향하게 하는 회전각이다.
-  const layoutDistance = 1.15;
+  const layoutDistance = 0.88;
   const revealOffset: [number, number, number] = [
     -layoutDistance * Math.sin(cardYaw),
     TILE_FLAT_Y - seatPosition[1],
@@ -1014,7 +1016,7 @@ function CenterPlay3D({
   if (flatOnTable) {
     return (
       <group
-        position={[0, TILE_FLAT_Y, -0.2]}
+        position={[0, TILE_FLAT_Y, LEXIO_CENTER_PLAY_TABLE_Z]}
         rotation={[-Math.PI / 2, 0, 0]}
       >
         {combo.tiles.map((t, i) => (
@@ -1035,7 +1037,7 @@ function CenterPlay3D({
 
   return (
     <group
-      position={[0, CENTER_PLAY_GROUP_Y, -0.2]}
+      position={[0, CENTER_PLAY_GROUP_Y, LEXIO_CENTER_PLAY_TABLE_Z]}
       rotation={[TILT_BACK, 0, 0]}
     >
       {combo.tiles.map((t, i) => (
