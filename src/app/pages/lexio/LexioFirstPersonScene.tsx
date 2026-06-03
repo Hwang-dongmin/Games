@@ -1329,7 +1329,7 @@ function FirstPersonCameraRig({
   const onIntroCompleteRef = useRef(onStartIntroComplete);
   onIntroCompleteRef.current = onStartIntroComplete;
 
-  const camPos0 = useMemo(() => new THREE.Vector3(0, 3.45, 4.55), []);
+  const camPos0 = useMemo(() => new THREE.Vector3(0, 3.24, 4.55), []);
   const camEndRadius = useMemo(
     () => Math.hypot(camPos0.x, camPos0.z),
     [camPos0],
@@ -1479,7 +1479,7 @@ export default function LexioFirstPersonScene({
   return (
     <Canvas
       shadows
-      camera={{ fov: 54, near: 0.08, far: 80, position: [0, 3.45, 4.55] }}
+      camera={{ fov: 54, near: 0.08, far: 80, position: [0, 3.24, 4.55] }}
       gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}
       className="h-full w-full touch-none"
     >
