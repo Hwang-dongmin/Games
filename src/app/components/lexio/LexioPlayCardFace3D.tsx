@@ -1,4 +1,7 @@
 import { Text } from '@react-three/drei';
+import { useFrame } from '@react-three/fiber';
+import { useMemo, useRef } from 'react';
+import * as THREE from 'three';
 import {
   LEXIO_SUIT_FACE,
   type LexioPlaySuit,
@@ -43,6 +46,7 @@ function GlowText({
   anchorX = 'left',
   anchorY = 'middle',
   font,
+  depthTest = true,
 }: {
   children: string;
   position: [number, number, number];
@@ -59,6 +63,7 @@ function GlowText({
   anchorX?: 'left' | 'center' | 'right';
   anchorY?: 'top' | 'middle' | 'bottom';
   font?: string;
+  depthTest?: boolean;
 }) {
   return (
     <Text
@@ -76,7 +81,7 @@ function GlowText({
       strokeWidth={strokeWidth}
       strokeColor={strokeColor}
       strokeOpacity={strokeOpacity}
-      material-depthTest
+      material-depthTest={depthTest}
       material-depthWrite={false}
       material-transparent
     >
@@ -227,9 +232,81 @@ function FancyTwoRectFrame({
   );
 }
 
-/**
- * 손패 3D 앞면 — 일반 패는 돌 위에 그림만, 2번은 불투명 화려 앞면
- */
+function createLocalFaceClipPlanes(hw: number, hh: number) {
+  return [
+    new THREE.Plane(new THREE.Vector3(-1, 0, 0), hw),
+    new THREE.Plane(new THREE.Vector3(1, 0, 0), hw),
+    new THREE.Plane(new THREE.Vector3(0, -1, 0), hh),
+    new THREE.Plane(new THREE.Vector3(0, 1, 0), hh),
+  ];
+}
+
+function useWorldFaceClipPlanes(
+  groupRef: React.RefObject<THREE.Group | null>,
+  hw: number,
+  hh: number,
+) {
+  const localPlanes = useMemo(
+    () => createLocalFaceClipPlanes(hw, hh),
+    [hw, hh],
+  );
+  const worldPlanes = useMemo(
+    () => localPlanes.map((plane) => plane.clone()),
+    [localPlanes],
+  );
+
+  useFrame(() => {
+    const group = groupRef.current;
+    if (!group) return;
+    const matrix = group.matrixWorld;
+    for (let i = 0; i < localPlanes.length; i++) {
+      worldPlanes[i].copy(localPlanes[i]).applyMatrix4(matrix);
+    }
+  });
+
+  return worldPlanes;
+}
+
+/** 숫자 원 배지 — 검은 원 + 문양색 테두리 */
+function NumDiscBadge({
+  position,
+  radius,
+  borderWidth,
+  color,
+  renderOrder,
+  clipPlanes,
+}: {
+  position: [number, number, number];
+  radius: number;
+  borderWidth: number;
+  color: string;
+  renderOrder: number;
+  clipPlanes: THREE.Plane[];
+}) {
+  const mat = {
+    toneMapped: false as const,
+    transparent: true,
+    opacity: 1,
+    depthTest: false,
+    depthWrite: false,
+    clippingPlanes: clipPlanes,
+    clipIntersection: false as const,
+  };
+  return (
+    <group position={position}>
+      <mesh renderOrder={renderOrder}>
+        <ringGeometry args={[radius, radius + borderWidth, 48]} />
+        <meshBasicMaterial color={color} {...mat} />
+      </mesh>
+      <mesh renderOrder={renderOrder}>
+        <circleGeometry args={[radius, 48]} />
+        <meshBasicMaterial color="#000000" {...mat} />
+      </mesh>
+    </group>
+  );
+}
+
+/** 손패 3D 앞면 — 일반 패는 돌 위에 그림만, 2번은 불투명 화려 앞면 */
 export function LexioPlayCardFace3D({
   number,
   suit,
@@ -246,23 +323,28 @@ export function LexioPlayCardFace3D({
 
   const numStr = String(number);
   const numSize = height * 0.24;
-  const numPos: [number, number, number] = [
-    -hw + width * 0.1,
-    hh - height * 0.11,
-    0.004,
+  const fancyNumPos: [number, number, number] = [0, 0, 0.014];
+  const fancyNumSize = height * 0.3;
+  const fancyNumDiscR = fancyNumSize * 0.55;
+  const numDiscR = Math.max(
+    numSize * (0.72 + (numStr.length - 1) * 0.15),
+    fancyNumDiscR * 1.12,
+  );
+  const numDiscCenter: [number, number, number] = [
+    -hw + width * 0.088 + numSize * 0.3 * numStr.length,
+    hh - height * 0.075 - numSize * 0.44,
+    0.014,
   ];
-  const fancyNumPos: [number, number, number] = [0, 0, 0.005];
-  const fancyNumSize = height * 0.35 * 0.9;
-  const fancyNumDiscR = fancyNumSize * 0.58;
-  const numDiscR = numSize * (0.5 + (numStr.length - 1) * 0.2);
-  const numDiscPos: [number, number, number] = [
-    numPos[0] + numDiscR * 0.82,
-    numPos[1] - numDiscR * 0.88,
-    0.003,
+  const numTextPos: [number, number, number] = [
+    numDiscCenter[0],
+    numDiscCenter[1] + numSize * 0.04,
+    0.016,
   ];
+  const faceGroupRef = useRef<THREE.Group>(null);
+  const clipPlanes = useWorldFaceClipPlanes(faceGroupRef, hw, hh);
 
   return (
-    <group scale={[hoverScale, hoverScale, 1]}>
+    <group ref={faceGroupRef} scale={[hoverScale, hoverScale, 1]}>
       {isFancyTwo && (
         <FancyTwoCardFace
           width={width}
@@ -308,37 +390,35 @@ export function LexioPlayCardFace3D({
         </>
       )}
 
-      <mesh
-        position={
-          isFancyTwo ? [0, 0, 0.003] : [numDiscPos[0], numDiscPos[1], numDiscPos[2]]
-        }
-        renderOrder={renderOrder + 2}
-      >
-        <circleGeometry
-          args={[isFancyTwo ? fancyNumDiscR : numDiscR, 40]}
-        />
-        <meshBasicMaterial color="#030303" />
-      </mesh>
+      <NumDiscBadge
+        position={isFancyTwo ? [0, 0, 0.014] : numDiscCenter}
+        radius={isFancyTwo ? fancyNumDiscR : numDiscR}
+        borderWidth={height * (isFancyTwo ? 0.042 : 0.036)}
+        color={face.color}
+        renderOrder={renderOrder + 40}
+        clipPlanes={clipPlanes}
+      />
 
       {/* 숫자 — 2번은 가운데, 그 외 좌상단 */}
       <GlowText
         position={
           isFancyTwo
             ? [fancyNumPos[0] - 0.002, fancyNumPos[1] - 0.002, fancyNumPos[2] - 0.001]
-            : [numPos[0] - 0.002, numPos[1] - 0.002, numPos[2] - 0.001]
+            : [numTextPos[0] - 0.002, numTextPos[1] - 0.002, numTextPos[2] - 0.001]
         }
         fontSize={isFancyTwo ? fancyNumSize * 1.06 : numSize * 1.06}
         color={face.glow}
         fillOpacity={isFancyTwo ? 0.55 : 0.45}
-        renderOrder={renderOrder + 3}
-        anchorX={isFancyTwo ? 'center' : 'left'}
-        anchorY={isFancyTwo ? 'middle' : 'top'}
+        renderOrder={renderOrder + 41}
+        anchorX="center"
+        anchorY="middle"
         font={NUMBER_FONT}
+        depthTest={false}
       >
         {numStr}
       </GlowText>
       <GlowText
-        position={isFancyTwo ? fancyNumPos : numPos}
+        position={isFancyTwo ? fancyNumPos : numTextPos}
         fontSize={isFancyTwo ? fancyNumSize : numSize}
         color={face.color}
         outlineWidth={
@@ -347,10 +427,11 @@ export function LexioPlayCardFace3D({
           NUMBER_OUTLINE_SCALE
         }
         outlineColor="#000000"
-        renderOrder={renderOrder + 4}
-        anchorX={isFancyTwo ? 'center' : 'left'}
-        anchorY={isFancyTwo ? 'middle' : 'top'}
+        renderOrder={renderOrder + 42}
+        anchorX="center"
+        anchorY="middle"
         font={NUMBER_FONT}
+        depthTest={false}
       >
         {numStr}
       </GlowText>

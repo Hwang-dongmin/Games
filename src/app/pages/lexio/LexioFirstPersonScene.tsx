@@ -334,7 +334,7 @@ function LexioTile3D({
   facePointerHover = true,
   finishReveal = false,
   rowLayer = 'single',
-  faceMode = 'html',
+  faceMode = 'mesh',
   liftAxis = 'y',
 }: {
   tile: LexioTile;
@@ -345,7 +345,7 @@ function LexioTile3D({
   dimmed?: boolean;
   /** false면 앞면 호버 메시·2D 호버 강조 없음 (판 종료 후 상대 공개 패 등) */
   facePointerHover?: boolean;
-  /** 판 종료 테이블 공개: 숫자 2 패 후광 */
+  /** 판 종료 공개 패 — 숫자 2 후광을 더 밝게 */
   finishReveal?: boolean;
   /** 손패 2줄일 때 앞·뒤 가림 순서 */
   rowLayer?: 'back' | 'single' | 'front';
@@ -393,7 +393,6 @@ function LexioTile3D({
 
   const showFaceHover = facePointerHover;
   const cardHovered = showFaceHover && hovered;
-  const numberTwoHalo = finishReveal && tile.number === 2;
 
   const meshOrder = TILE_RENDER_ORDER[rowLayer];
   const htmlZRange = TILE_HTML_Z_RANGE[rowLayer];
@@ -414,22 +413,6 @@ function LexioTile3D({
       rotation={rotation ?? [0, 0, 0]}
       renderOrder={meshOrder}
     >
-      {numberTwoHalo && (
-        <mesh
-          position={[0, 0, -0.008]}
-          renderOrder={-1}
-          scale={[1.14, 1.14, 1.18]}
-          geometry={LEXIO_TILE_ROUNDED_GEOM}
-        >
-          <meshBasicMaterial
-            color="#fcd34d"
-            transparent
-            opacity={0.4}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-          />
-        </mesh>
-      )}
       <mesh
         castShadow
         receiveShadow
@@ -481,7 +464,6 @@ function LexioTile3D({
             width={TILE_FACE_W}
             height={TILE_FACE_H}
             isHovered={cardHovered}
-            numberTwoHalo={numberTwoHalo}
             renderOrder={meshOrder + 1}
           />
         </group>
@@ -506,7 +488,6 @@ function LexioTile3D({
               small
               embed3D
               isHovered={cardHovered}
-              numberTwoHalo={numberTwoHalo}
             />
             <button
               type="button"
@@ -535,7 +516,6 @@ function LexioTile3D({
               small
               embed3D
               isHovered={cardHovered}
-              numberTwoHalo={numberTwoHalo}
             />
           </div>
         )}
@@ -752,6 +732,7 @@ function OpponentRevealAnimated({
           tile={tile}
           position={[-revealTotal / 2 + i * revealGap, 0, 0]}
           facePointerHover={false}
+          faceMode="mesh"
           finishReveal
         />
       ))}
@@ -844,6 +825,7 @@ function HumanRevealAnimated({
           position={position}
           rowLayer={rowLayer}
           facePointerHover={false}
+          faceMode="mesh"
           finishReveal
         />
       ))}
@@ -1480,7 +1462,7 @@ export default function LexioFirstPersonScene({
     <Canvas
       shadows
       camera={{ fov: 54, near: 0.08, far: 80, position: [0, 3.24, 4.55] }}
-      gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping }}
+      gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, localClippingEnabled: true }}
       className="h-full w-full touch-none"
     >
       <FirstPersonCameraRig

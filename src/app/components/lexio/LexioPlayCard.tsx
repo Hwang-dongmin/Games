@@ -169,14 +169,14 @@ export function LexioPlayCard({
   const numDiscCls = small
     ? tight
       ? numWide
-        ? 'h-[1.55rem] w-[2.05rem]'
-        : 'h-[1.55rem] w-[1.55rem]'
+        ? 'h-[1.6rem] w-[2.2rem]'
+        : 'h-[1.6rem] w-[1.6rem]'
       : numWide
-        ? 'h-[1.65rem] w-[2.15rem]'
-        : 'h-[1.65rem] w-[1.65rem]'
+        ? 'h-[1.75rem] w-[2.3rem]'
+        : 'h-[1.75rem] w-[1.75rem]'
     : numWide
-      ? 'h-[2rem] w-[2.5rem]'
-      : 'h-[2rem] w-[2rem]';
+      ? 'h-[2.05rem] w-[2.7rem]'
+      : 'h-[2.05rem] w-[2.05rem]';
 
   const hoverLift =
     'transition-[transform,box-shadow,border-color] duration-200 ease-out will-change-transform';
@@ -197,29 +197,30 @@ export function LexioPlayCard({
 
   const fancyNumCls = small
     ? tight
-      ? 'text-[22px] font-black tabular-nums tracking-tight'
-      : 'text-[23px] font-black tabular-nums tracking-tight'
-    : 'text-[2.2rem] font-black tabular-nums tracking-tight';
+      ? 'text-[19px] font-black tabular-nums tracking-tight'
+      : 'text-[20px] font-black tabular-nums tracking-tight'
+    : 'text-[1.95rem] font-black tabular-nums tracking-tight';
+  const numDiscBorderCls = small ? 'border-[4.5px]' : 'border-[6px]';
+  const numDiscBorderStyle = { borderColor: face.color } as const;
   const fancyNumDiscCls = small
     ? tight
-      ? 'h-[1.85rem] w-[1.85rem]'
-      : 'h-[1.95rem] w-[1.95rem]'
-    : 'h-[2.4rem] w-[2.4rem]';
+      ? 'h-[1.45rem] w-[1.45rem]'
+      : 'h-[1.55rem] w-[1.55rem]'
+    : 'h-[1.85rem] w-[1.85rem]';
 
   return (
     <div
       className={[
-        'relative overflow-hidden rounded-lg',
-        isFancyTwo ? 'flex flex-col justify-center' : 'flex flex-col justify-between',
+        'relative rounded-lg',
         isFancyTwo
           ? 'bg-neutral-950 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_-2px_0_rgba(0,0,0,0.5),0_2px_0_rgba(0,0,0,0.55),0_6px_14px_-4px_rgba(0,0,0,0.75)]'
           : 'bg-neutral-950 border border-neutral-800/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),inset_0_-2px_0_rgba(0,0,0,0.45),0_2px_0_rgba(0,0,0,0.55),0_6px_14px_-4px_rgba(0,0,0,0.75)]',
         tight ? 'aspect-[57/79]' : 'aspect-[57/89]',
         small
           ? tight
-            ? 'w-[3.1rem] px-1.5 py-1.5'
-            : 'w-[3.1rem] px-1.5 py-1'
-          : 'w-[4rem] px-2 py-1.5',
+            ? 'w-[3.1rem]'
+            : 'w-[3.1rem]'
+          : 'w-[4rem]',
         hoverLift,
         hoverStyle,
         className,
@@ -227,6 +228,17 @@ export function LexioPlayCard({
         .filter(Boolean)
         .join(' ')}
     >
+      <div
+        className={[
+          'relative h-full w-full overflow-hidden rounded-[inherit]',
+          isFancyTwo ? 'flex flex-col justify-center' : 'flex flex-col justify-between',
+          small
+            ? tight
+              ? 'px-1.5 py-1.5'
+              : 'px-1.5 py-1'
+            : 'px-2 py-1.5',
+        ].join(' ')}
+      >
       {isFancyTwo ? (
         <>
           <div
@@ -281,31 +293,31 @@ export function LexioPlayCard({
         />
       )}
       {isFancyTwo ? (
-        <span className="relative z-[2] mx-auto inline-flex items-center justify-center">
+        <div
+          className={`relative z-10 mx-auto flex shrink-0 items-center justify-center rounded-full border-solid bg-black ${numDiscBorderCls} ${fancyNumDiscCls}`}
+          style={numDiscBorderStyle}
+        >
           <span
-            className={`pointer-events-none absolute rounded-full bg-[#030303] ${fancyNumDiscCls}`}
-            aria-hidden
-          />
-          <span
-            className={`relative leading-none ${fancyNumCls} ${numberClass}`}
+            className={`leading-none ${fancyNumCls} ${numberClass} translate-y-[-0.5px]`}
             style={numberStrokeStyle(true)}
           >
             {number}
           </span>
-        </span>
+        </div>
       ) : (
         <>
-          <span className="relative z-[1] inline-flex self-start items-center justify-center">
-            <span
-              className={`pointer-events-none absolute rounded-full bg-[#030303] ${numDiscCls}`}
-              aria-hidden
-            />
-            <span
-              className={`relative leading-none ${numCls} ${numberClass}`}
-              style={numberStrokeStyle(false)}
+          <span className="relative z-[1] inline-flex -translate-x-px -translate-y-1.5 self-start">
+            <div
+              className={`flex shrink-0 items-center justify-center rounded-full border-solid bg-black ${numDiscBorderCls} ${numDiscCls}`}
+              style={numDiscBorderStyle}
             >
-              {number}
-            </span>
+              <span
+                className={`leading-none ${numCls} ${numberClass} translate-y-[-0.5px]`}
+                style={numberStrokeStyle(false)}
+              >
+                {number}
+              </span>
+            </div>
           </span>
           <div className="relative z-[1] flex items-end justify-between gap-0.5">
             <Icon
@@ -348,6 +360,7 @@ export function LexioPlayCard({
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }
