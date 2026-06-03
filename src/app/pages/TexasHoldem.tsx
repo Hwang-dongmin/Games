@@ -119,6 +119,58 @@ const AI_NAME_POOL = [
 ];
 const HOLDEM_STORAGE_KEY = 'texas-holdem-state-v1';
 
+/** 이번 매치에서 아직 칩이 남아 있는 플레이어 */
+function isInMatch(player: Player): boolean {
+  return !player.eliminated && player.chips > 0;
+}
+
+/** 베팅 라운드에서 액션 가능(탈락·폴드·올인 제외) */
+function canPlayerAct(player: Player): boolean {
+  return isInMatch(player) && !player.folded;
+}
+
+/** 핸드 종료 후 칩 0 → 탈락 처리 */
+function applyElimination(players: Player[]): Player[] {
+  return players.map(p =>
+    p.chips <= 0
+      ? { ...p, eliminated: true, folded: true, cards: [], currentBet: 0 }
+      : p
+  );
+}
+
+/** fromIndex 다음부터 시계 방향으로 첫 액션 가능 좌석 */
+function findNextActingPlayerIndex(players: Player[], fromIndex: number): number | null {
+  if (players.length === 0) return null;
+  for (let step = 1; step <= players.length; step++) {
+    const idx = (fromIndex + step) % players.length;
+    if (canPlayerAct(players[idx])) return idx;
+  }
+  return null;
+}
+
+/** 딜러 다음부터 첫 액션 가능 좌석 */
+function findFirstActingAfterDealer(players: Player[], dealerIdx: number): number | null {
+  return findNextActingPlayerIndex(players, dealerIdx);
+}
+
+const DEALER_BUTTON_STYLE: React.CSSProperties = {
+  background:
+    'radial-gradient(circle at 30% 30%, #fef3c7 0%, #f59e0b 55%, #b45309 100%)',
+  color: '#1c1917',
+  boxShadow:
+    'inset 0 1px 0 rgba(255,255,255,0.65), 0 6px 14px -4px rgba(0,0,0,0.6), 0 0 0 1px rgba(120,53,15,0.35)',
+};
+
+/** 좌석 위치 기준: 왼쪽·상단은 이름 오른쪽, 오른쪽·하단(본인)은 이름 왼쪽 */
+function getDealerButtonNameSide(seatX: number, seatY: number): 'left' | 'right' {
+  const isBottomCenter = seatY > 86 && seatX >= 42 && seatX <= 58;
+  const isTop = seatY < 38;
+  const isLeftSide = seatX < 48;
+  if (isBottomCenter) return 'left';
+  if (isTop || isLeftSide) return 'right';
+  return 'left';
+}
+
 export default function TexasHoldem() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [deck, setDeck] = useState<Card[]>([]);
@@ -148,7 +200,16 @@ export default function TexasHoldem() {
   // 게임 초기화
   const initGame = (aiCount: number = numAIPlayers) => {
     const newPlayers: Player[] = [
-      { id: 0, name: '플레이어', chips: INITIAL_CHIPS, cards: [], currentBet: 0, folded: false, isAI: false },
+      {
+        id: 0,
+        name: '플레이어',
+        chips: INITIAL_CHIPS,
+        cards: [],
+        currentBet: 0,
+        folded: false,
+        eliminated: false,
+        isAI: false,
+      },
     ];
     const shuffledNames = [...AI_NAME_POOL].sort(() => Math.random() - 0.5);
 
@@ -164,6 +225,7 @@ export default function TexasHoldem() {
         cards: [],
         currentBet: 0,
         folded: false,
+        eliminated: false,
         isAI: true,
         personality,
       });
@@ -196,22 +258,41 @@ export default function TexasHoldem() {
     setLastActions({});
   };
 
-  // 새 라운드 시작
-  const startNewRound = () => {
-    if (players.filter(p => p.chips > 0).length < 2) {
-      const humanPlayer = players.find(p => !p.isAI);
-      if (humanPlayer && humanPlayer.chips > 0) {
-        setMessage('축하합니다! 모든 상대를 이겼습니다!');
-        setGamePhase('game-over');
-      } else {
-        setMessage('게임 오버! 칩을 모두 잃었습니다.');
-        setGamePhase('game-over');
-      }
-      return;
+  const finishMatchIfNeeded = (roster: Player[]): boolean => {
+    const humanPlayer = roster.find(p => !p.isAI);
+    const playersInMatch = roster.filter(isInMatch);
+
+    if (humanPlayer && humanPlayer.chips <= 0) {
+      setMessage('게임 오버! 칩을 모두 잃었습니다.');
+      setGamePhase('game-over');
+      return true;
     }
 
+    if (playersInMatch.length < 2) {
+      if (humanPlayer && humanPlayer.chips > 0) {
+        setMessage('축하합니다! 모든 상대를 이겼습니다!');
+      } else {
+        setMessage('게임 오버! 칩을 모두 잃었습니다.');
+      }
+      setGamePhase('game-over');
+      return true;
+    }
+
+    return false;
+  };
+
+  const tryStartNextRoundAfterShowdown = () => {
+    setAwaitingNextRound(false);
+    if (finishMatchIfNeeded(players)) return;
+    startNewRound();
+  };
+
+  // 새 라운드 시작
+  const startNewRound = () => {
+    if (finishMatchIfNeeded(players)) return;
+
     const newDeck = shuffleDeck(createDeck());
-    const activePlayers = players.filter(p => p.chips > 0);
+    const activePlayers = players.filter(isInMatch);
     setRoundNumber(prev => prev + 1);
 
     // 블라인드 설정
@@ -222,9 +303,9 @@ export default function TexasHoldem() {
     const bbActiveIndex = (newDealerActiveIndex + 2) % activePlayers.length;
 
     const updatedPlayers = players.map(p => {
-      // 탈락(칩 0): 블라인드·홀카드 없음 — 덱도 소모하지 않음
-      if (p.chips <= 0) {
-        return { ...p, folded: true, currentBet: 0, cards: [] };
+      // 탈락: 블라인드·홀카드 없음 — 덱도 소모하지 않음
+      if (!isInMatch(p)) {
+        return { ...p, eliminated: true, folded: true, currentBet: 0, cards: [] };
       }
 
       const activeIdx = activePlayers.findIndex(ap => ap.id === p.id);
@@ -272,7 +353,7 @@ export default function TexasHoldem() {
     if (gamePhase === 'betting' || gamePhase === 'game-over') return;
 
     const player = players[currentPlayerIndex];
-    if (!player || player.folded) return;
+    if (!player || player.folded || player.eliminated || !isInMatch(player)) return;
 
     const updatedPlayers = [...players];
     const currentPlayer = updatedPlayers[currentPlayerIndex];
@@ -334,7 +415,7 @@ export default function TexasHoldem() {
   ) => {
     const activePlayers = latestPlayers.filter(p => !p.folded);
     if (activePlayers.length <= 1) {
-      endRound();
+      endRound(latestPlayers);
       return;
     }
 
@@ -347,77 +428,87 @@ export default function TexasHoldem() {
     const everyoneActed = playersStillToAct.every(p => latestActed.has(p.id));
 
     if (allMatchedBet && everyoneActed) {
-      moveToNextPhase();
+      moveToNextPhase(latestPlayers);
       return;
     }
 
-    let nextIndex = (currentPlayerIndex + 1) % latestPlayers.length;
-    let safety = 0;
-    while (
-      (latestPlayers[nextIndex].folded || latestPlayers[nextIndex].chips === 0) &&
-      safety < latestPlayers.length
-    ) {
-      nextIndex = (nextIndex + 1) % latestPlayers.length;
-      safety++;
+    const nextIndex = findNextActingPlayerIndex(latestPlayers, currentPlayerIndex);
+    if (nextIndex === null) {
+      moveToNextPhase(latestPlayers);
+      return;
     }
 
     setCurrentPlayerIndex(nextIndex);
   };
 
-  // 다음 페이즈로 이동
-  const moveToNextPhase = () => {
-    const newDeck = [...deck];
+  // 다음 페이즈로 이동 (올인만 남으면 베팅 없이 스트리트를 연속 진행)
+  const moveToNextPhase = (latestPlayers?: Player[]) => {
+    const playersForTurn = latestPlayers ?? players;
+    let workingDeck = [...deck];
+    let phase: GamePhase = gamePhase;
+    let workingCommunity = [...communityCards];
+    let phaseMessage = message;
 
-    if (gamePhase === 'pre-flop') {
-      // 플랍
-      const flop = [newDeck.pop()!, newDeck.pop()!, newDeck.pop()!];
-      setCommunityCards(flop);
-      setGamePhase('flop');
-      setMessage('플랍: 3장의 커뮤니티 카드가 공개되었습니다.');
-    } else if (gamePhase === 'flop') {
-      // 턴
-      setCommunityCards(prev => [...prev, newDeck.pop()!]);
-      setGamePhase('turn');
-      setMessage('턴: 4번째 커뮤니티 카드가 공개되었습니다.');
-    } else if (gamePhase === 'turn') {
-      // 리버
-      setCommunityCards(prev => [...prev, newDeck.pop()!]);
-      setGamePhase('river');
-      setMessage('리버: 마지막 커뮤니티 카드가 공개되었습니다.');
-    } else if (gamePhase === 'river') {
-      // 쇼다운
-      endRound();
-      return;
-    }
+    const stillInHand = () => playersForTurn.filter(p => !p.folded);
 
-    setDeck(newDeck);
-    setCurrentBet(0);
-    setPlayers(prev => prev.map(p => ({ ...p, currentBet: 0 })));
-    // 폴드되지 않은 첫 플레이어부터 시작 (딜러 다음)
-    let nextRoundStartIndex = (dealerIndex + 1) % players.length;
-    let safety = 0;
-    while (
-      (players[nextRoundStartIndex].folded || players[nextRoundStartIndex].chips === 0) &&
-      safety < players.length
-    ) {
-      nextRoundStartIndex = (nextRoundStartIndex + 1) % players.length;
-      safety++;
+    while (true) {
+      if (stillInHand().length <= 1) {
+        endRound(playersForTurn);
+        return;
+      }
+
+      if (phase === 'pre-flop') {
+        workingCommunity = [workingDeck.pop()!, workingDeck.pop()!, workingDeck.pop()!];
+        phase = 'flop';
+        phaseMessage = '플랍: 3장의 커뮤니티 카드가 공개되었습니다.';
+      } else if (phase === 'flop') {
+        workingCommunity = [...workingCommunity, workingDeck.pop()!];
+        phase = 'turn';
+        phaseMessage = '턴: 4번째 커뮤니티 카드가 공개되었습니다.';
+      } else if (phase === 'turn') {
+        workingCommunity = [...workingCommunity, workingDeck.pop()!];
+        phase = 'river';
+        phaseMessage = '리버: 마지막 커뮤니티 카드가 공개되었습니다.';
+      } else if (phase === 'river') {
+        endRound(playersForTurn);
+        return;
+      } else {
+        return;
+      }
+
+      const nextRoundStartIndex = findFirstActingAfterDealer(playersForTurn, dealerIndex);
+      if (nextRoundStartIndex !== null) {
+        setDeck(workingDeck);
+        setCommunityCards(workingCommunity);
+        setGamePhase(phase);
+        setMessage(phaseMessage);
+        setCurrentBet(0);
+        setPlayers(prev =>
+          prev.map(p => ({
+            ...p,
+            currentBet: 0,
+          }))
+        );
+        setCurrentPlayerIndex(nextRoundStartIndex);
+        setBettingRoundStartIndex(nextRoundStartIndex);
+        setActedPlayerIds(new Set());
+        setLastActions({});
+        return;
+      }
+      // 모두 올인 — 다음 스트리트로 계속
     }
-    setCurrentPlayerIndex(nextRoundStartIndex);
-    setBettingRoundStartIndex(nextRoundStartIndex);
-    setActedPlayerIds(new Set());
-    setLastActions({});
   };
 
   // 라운드 종료
-  const endRound = () => {
+  const endRound = (latestPlayers?: Player[]) => {
+    const playersForRound = latestPlayers ?? players;
     setGamePhase('showdown');
     setShowCards(true);
     setAwaitingNextRound(true);
 
-    const activePlayers = players.filter(p => !p.folded);
+    const activePlayers = playersForRound.filter(p => !p.folded);
     const roundCommunityCards = [...communityCards];
-    const playersSnapshot = players.map(p => ({
+    const playersSnapshot = playersForRound.map(p => ({
       name: p.name,
       cards: [...p.cards],
       folded: p.folded,
@@ -431,8 +522,8 @@ export default function TexasHoldem() {
         winnerCards.length >= 5
           ? getHandDescriptionKorean(evaluateHand(winnerCards))
           : '쇼다운 없이 승리';
-      const updatedPlayers = players.map(p =>
-        p.id === winner.id ? { ...p, chips: p.chips + pot } : p
+      const updatedPlayers = applyElimination(
+        playersForRound.map(p => (p.id === winner.id ? { ...p, chips: p.chips + pot } : p))
       );
       setPlayers(updatedPlayers);
       setRoundHistory(prev => {
@@ -448,6 +539,7 @@ export default function TexasHoldem() {
         return [entry, ...prev].slice(0, 10);
       });
       setMessage(`${winner.name}이(가) ${winnerHand}로 승리! ${pot} 칩 획득!`);
+      finishMatchIfNeeded(updatedPlayers);
     } else {
       // 쇼다운
       const evaluations = activePlayers.map(p => ({
@@ -459,13 +551,15 @@ export default function TexasHoldem() {
       const winners = evaluations.filter(e => e.hand.value === evaluations[0].hand.value);
       const winAmount = Math.floor(pot / winners.length);
 
-      const updatedPlayers = players.map(p => {
-        const winner = winners.find(w => w.player.id === p.id);
-        if (winner) {
-          return { ...p, chips: p.chips + winAmount };
-        }
-        return p;
-      });
+      const updatedPlayers = applyElimination(
+        playersForRound.map(p => {
+          const winner = winners.find(w => w.player.id === p.id);
+          if (winner) {
+            return { ...p, chips: p.chips + winAmount };
+          }
+          return p;
+        })
+      );
 
       setPlayers(updatedPlayers);
 
@@ -500,17 +594,42 @@ export default function TexasHoldem() {
         });
         setMessage(`무승부! ${winnerNames}가 ${winAmount}칩씩 나눠가집니다.`);
       }
+
+      finishMatchIfNeeded(updatedPlayers);
     }
 
     setPot(0);
   };
+
+  // 폴드·올인 등 액션 불가 좌석에 턴이 멈춘 경우 자동 스킵
+  useEffect(() => {
+    if (
+      gamePhase === 'setup' ||
+      gamePhase === 'betting' ||
+      gamePhase === 'showdown' ||
+      gamePhase === 'game-over'
+    ) {
+      return;
+    }
+
+    const current = players[currentPlayerIndex];
+    if (!current || canPlayerAct(current)) return;
+
+    const activePlayers = players.filter(p => !p.folded);
+    if (activePlayers.length <= 1) {
+      endRound(players);
+      return;
+    }
+
+    moveToNextPlayer(players, currentBet, actedPlayerIds);
+  }, [currentPlayerIndex, players, gamePhase, currentBet, actedPlayerIds]);
 
   // AI 턴 처리
   useEffect(() => {
     if (gamePhase === 'betting' || gamePhase === 'showdown' || gamePhase === 'game-over') return;
 
     const currentPlayer = players[currentPlayerIndex];
-    if (!currentPlayer || !currentPlayer.isAI || currentPlayer.folded) return;
+    if (!currentPlayer || !currentPlayer.isAI || !canPlayerAct(currentPlayer)) return;
 
     const timer = setTimeout(() => {
       const decision = getAIDecision(currentPlayer, communityCards, currentBet, pot);
@@ -534,7 +653,13 @@ export default function TexasHoldem() {
         return;
       }
       const saved: PersistedTexasHoldemState = JSON.parse(raw);
-      setPlayers(saved.players ?? []);
+      setPlayers(
+        (saved.players ?? []).map(p => ({
+          ...p,
+          eliminated: p.eliminated ?? p.chips <= 0,
+          folded: p.folded || p.chips <= 0,
+        }))
+      );
       setDeck(saved.deck ?? []);
       setCommunityCards(saved.communityCards ?? []);
       setPot(saved.pot ?? 0);
@@ -642,8 +767,7 @@ export default function TexasHoldem() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Enter') return;
       event.preventDefault();
-      setAwaitingNextRound(false);
-      startNewRound();
+      tryStartNextRoundAfterShowdown();
     };
 
     window.addEventListener('keydown', onKeyDown);
@@ -651,7 +775,10 @@ export default function TexasHoldem() {
   }, [awaitingNextRound, gamePhase, players, dealerIndex, numAIPlayers, blindLevel, blindTimeLeft]);
 
   const humanPlayer = players.find(p => !p.isAI);
-  const isHumanTurn = players[currentPlayerIndex] && !players[currentPlayerIndex].isAI && !players[currentPlayerIndex].folded;
+  const isHumanTurn =
+    players[currentPlayerIndex] &&
+    !players[currentPlayerIndex].isAI &&
+    canPlayerAct(players[currentPlayerIndex]);
   const callAmount = humanPlayer ? currentBet - humanPlayer.currentBet : 0;
   const currentSmallBlind = BASE_SMALL_BLIND + blindLevel * BLIND_INCREASE_SMALL;
   const currentBigBlind = BASE_BIG_BLIND + blindLevel * BLIND_INCREASE_BIG;
@@ -664,12 +791,6 @@ export default function TexasHoldem() {
   ).padStart(2, '0')}`;
   const totalPlayers = players.length;
   const dealerSeatIndex = totalPlayers > 0 ? dealerIndex % totalPlayers : 0;
-  const dealerAngle = totalPlayers > 0 ? (dealerSeatIndex / totalPlayers) * Math.PI * 2 + Math.PI / 2 : 0;
-  // 홀카드(좌석에서 안쪽 ~42/37)와 겹치지 않게, 좌석(56/51) 쪽으로 더 밀어 둠
-  const dealerButtonPosition = {
-    left: `${50 + 51 * Math.cos(dealerAngle)}%`,
-    top: `${50 + 46 * Math.sin(dealerAngle)}%`,
-  };
 
   useEffect(() => {
     if (maxRaiseTotal < minRaiseTotal) return;
@@ -1424,10 +1545,7 @@ export default function TexasHoldem() {
 
                   {awaitingNextRound && gamePhase === 'showdown' && (
                     <button
-                      onClick={() => {
-                        setAwaitingNextRound(false);
-                        startNewRound();
-                      }}
+                      onClick={tryStartNextRoundAfterShowdown}
                       className="holdem-shimmer rounded-full px-6 py-2 text-[10px] tracking-[0.3em] uppercase font-semibold transition-transform hover:-translate-y-0.5"
                       style={{
                         background:
@@ -1449,9 +1567,11 @@ export default function TexasHoldem() {
                   const radiusY = 51;
                   const x = 50 + radiusX * Math.cos(angle);
                   const y = 50 + radiusY * Math.sin(angle);
-                  const isOut = player.chips <= 0;
+                  const isOut = player.eliminated || player.chips <= 0;
                   const isActive =
-                    idx === currentPlayerIndex && !player.folded && !isOut;
+                    idx === currentPlayerIndex && canPlayerAct(player) && !isOut;
+                  const dealerNameSide =
+                    idx === dealerSeatIndex ? getDealerButtonNameSide(x, y) : null;
 
                   return (
                     <div
@@ -1469,13 +1589,31 @@ export default function TexasHoldem() {
                       >
                         <div className={isOut ? 'opacity-[0.48] grayscale' : ''}>
                           {/* Player Info */}
-                          <div className="flex items-center justify-center gap-1.5 mb-0.5">
+                          <div className="relative flex items-center justify-center gap-1.5 mb-0.5">
+                            {dealerNameSide === 'left' && (
+                              <div
+                                className="pointer-events-none absolute right-full top-1/2 z-20 mr-1.5 -translate-y-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold tracking-wide transition-all duration-700 ease-in-out shrink-0"
+                                style={DEALER_BUTTON_STYLE}
+                                title="Dealer Button"
+                              >
+                                D
+                              </div>
+                            )}
                             <div className="flex items-center gap-1.5 min-w-0">
                               <Users className="w-3 h-3 text-amber-300/80 shrink-0" />
-                              <span className="text-slate-100 text-sm font-semibold tracking-wide truncate">
+                              <span className="text-slate-100 text-sm font-semibold tracking-wide whitespace-nowrap">
                                 {player.name}
                               </span>
                             </div>
+                            {dealerNameSide === 'right' && (
+                              <div
+                                className="pointer-events-none absolute left-full top-1/2 z-20 ml-1.5 -translate-y-1/2 w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold tracking-wide transition-all duration-700 ease-in-out shrink-0"
+                                style={DEALER_BUTTON_STYLE}
+                                title="Dealer Button"
+                              >
+                                D
+                              </div>
+                            )}
                           </div>
                           {player.isAI && player.personality && (
                             <div className="text-[9px] tracking-[0.18em] uppercase text-amber-200/60 text-center mb-1">
@@ -1511,6 +1649,7 @@ export default function TexasHoldem() {
                             </span>
                           </div>
                         )}
+
                       </div>
                     </div>
                   );
@@ -1526,7 +1665,7 @@ export default function TexasHoldem() {
                   const cardOffset = 14;
                   const cardX = x - cardOffset * Math.cos(angle);
                   const cardY = y - cardOffset * Math.sin(angle);
-                  const isOut = player.chips <= 0;
+                  const isOut = player.eliminated || player.chips <= 0;
                   if (isOut && player.cards.length === 0) return null;
 
                   const isRedCard = (suit: string) => suit === '♥' || suit === '♦';
@@ -1659,27 +1798,6 @@ export default function TexasHoldem() {
                   );
                 })}
 
-                {/* Dealer / Blind button on table */}
-                {players.length > 0 && (
-                  <div
-                    className="absolute -translate-x-1/2 -translate-y-1/2 z-[11] transition-all duration-700 ease-in-out"
-                    style={dealerButtonPosition}
-                  >
-                    <div
-                      className="w-9 h-9 rounded-full flex items-center justify-center text-[10px] font-bold tracking-wide"
-                      style={{
-                        background:
-                          'radial-gradient(circle at 30% 30%, #fef3c7 0%, #f59e0b 55%, #b45309 100%)',
-                        color: '#1c1917',
-                        boxShadow:
-                          'inset 0 1px 0 rgba(255,255,255,0.65), 0 6px 14px -4px rgba(0,0,0,0.6), 0 0 0 1px rgba(120,53,15,0.35)',
-                      }}
-                      title="Dealer / Blind Button"
-                    >
-                      D
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 

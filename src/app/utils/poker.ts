@@ -110,6 +110,8 @@ export interface Player {
   cards: Card[];
   currentBet: number;
   folded: boolean;
+  /** 칩을 모두 잃어 이번 매치에서 더 이상 핸드에 참가하지 않음 */
+  eliminated?: boolean;
   isAI: boolean;
   personality?: AIPersonality;
 }
@@ -348,6 +350,8 @@ export function getAIDecision(
   currentBet: number,
   pot: number
 ): 'fold' | 'call' | 'raise' {
+  if (player.folded || player.eliminated || player.chips <= 0) return 'fold';
+
   const persona = player.personality ?? DEFAULT_PERSONALITY;
   const callAmount = Math.max(0, currentBet - player.currentBet);
 
