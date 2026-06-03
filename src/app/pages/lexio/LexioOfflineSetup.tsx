@@ -1,7 +1,9 @@
-import { BookOpen, Bot, Layers3 } from 'lucide-react';
+import { BookOpen, Bot, Layers3, Sparkles } from 'lucide-react';
 import {
   lexioDeckTileCount,
   lexioHandSizeForPlayerCount,
+  LEXIO_AI_DIFFICULTY_OPTIONS,
+  type LexioAIDifficulty,
 } from '../../utils/lexio';
 
 type LexioOfflineSetupProps = {
@@ -12,6 +14,8 @@ type LexioOfflineSetupProps = {
   minAiCount: number;
   maxAiCount: number;
   onAiCountChange: (count: number) => void;
+  pendingAiDifficulty: LexioAIDifficulty;
+  onAiDifficultyChange: (difficulty: LexioAIDifficulty) => void;
   onStart: () => void;
   onOpenRules: () => void;
 };
@@ -24,12 +28,17 @@ export default function LexioOfflineSetup({
   minAiCount,
   maxAiCount,
   onAiCountChange,
+  pendingAiDifficulty,
+  onAiDifficultyChange,
   onStart,
   onOpenRules,
 }: LexioOfflineSetupProps) {
   const playerCount = pendingAiCount + 1;
   const handSize = lexioHandSizeForPlayerCount(playerCount);
   const deckTiles = lexioDeckTileCount(playerCount);
+  const selectedDifficulty = LEXIO_AI_DIFFICULTY_OPTIONS.find(
+    (o) => o.id === pendingAiDifficulty,
+  );
 
   return (
     <div className="lexio-offline-setup">
@@ -59,7 +68,7 @@ export default function LexioOfflineSetup({
 
         <div className="lexio-offline-setup-body">
           <ul
-            className="lexio-offline-setup-stats lexio-offline-setup-stats--duo"
+            className="lexio-offline-setup-stats"
             aria-label="게임 요약"
           >
             <li className="lexio-offline-setup-stat">
@@ -77,6 +86,15 @@ export default function LexioOfflineSetup({
                 <span className="lexio-offline-setup-stat-label">패 구성</span>
                 <span className="lexio-offline-setup-stat-value">
                   각 {handSize}장 · 덱 {deckTiles}장
+                </span>
+              </div>
+            </li>
+            <li className="lexio-offline-setup-stat">
+              <Sparkles className="lexio-offline-setup-stat-icon" aria-hidden />
+              <div className="lexio-offline-setup-stat-copy">
+                <span className="lexio-offline-setup-stat-label">AI 난이도</span>
+                <span className="lexio-offline-setup-stat-value">
+                  {selectedDifficulty?.label ?? pendingAiDifficulty}
                 </span>
               </div>
             </li>
@@ -107,6 +125,40 @@ export default function LexioOfflineSetup({
                   AI {minAiCount}~{maxAiCount}명 (총 {minAiCount + 1}~
                   {maxAiCount + 1}인)
                 </p>
+              </div>
+
+              <div className="lexio-offline-setup-rounds">
+                <div className="lexio-offline-setup-rounds-head">
+                  <span id="lexio-ai-difficulty-label">AI 난이도</span>
+                </div>
+                <div
+                  className="lexio-offline-setup-difficulty"
+                  role="radiogroup"
+                  aria-labelledby="lexio-ai-difficulty-label"
+                >
+                  {LEXIO_AI_DIFFICULTY_OPTIONS.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={pendingAiDifficulty === option.id}
+                      disabled={!option.available}
+                      onClick={() => onAiDifficultyChange(option.id)}
+                      className={`lexio-offline-setup-difficulty-btn${
+                        pendingAiDifficulty === option.id
+                          ? ' lexio-offline-setup-difficulty-btn--active'
+                          : ''
+                      }${!option.available ? ' lexio-offline-setup-difficulty-btn--disabled' : ''}`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+                {selectedDifficulty && (
+                  <p className="lexio-offline-setup-rounds-hint">
+                    {selectedDifficulty.description}
+                  </p>
+                )}
               </div>
 
               <div className="lexio-offline-setup-rounds">

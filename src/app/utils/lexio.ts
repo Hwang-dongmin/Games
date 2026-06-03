@@ -306,52 +306,413 @@ export function enumerateCombos(
   return result;
 }
 
-// AI: 현재 트릭을 이길 수 있는 가장 약한 조합 반환, 없으면 null
-// target === null 이면 리드:
-//   큰 조합(페어/트리플/5장 풀하우스·플러시 등)을 적극적으로 활용하도록 확률 가중을 둠.
-export function aiFindMove(
+export type LexioAIDifficulty = 'easy' | 'medium' | 'hard';
+
+export const LEXIO_AI_DIFFICULTY_OPTIONS: {
+  id: LexioAIDifficulty;
+  label: string;
+  description: string;
+  available: boolean;
+}[] = [
+  {
+    id: 'easy',
+    label: '이지',
+    description: '기본 AI — 약한 패부터 내고 조합은 확률적으로 사용',
+    available: true,
+  },
+  {
+    id: 'medium',
+    label: '중간',
+    description:
+      '상대 잔여 패 위협(3→2→1장)에 따라 조합·큰 싱글 우선, 비싼 패로 이기기는 자제',
+    available: true,
+  },
+  {
+    id: 'hard',
+    label: '하드',
+    description:
+      '숫자 카운팅·승리 직전 차단·5장 조합 타이밍·손패 유연성까지 고려',
+    available: true,
+  },
+];
+
+export type AiPlayerSnapshot = {
+  id: number;
+  handCount: number;
+};
+
+export type AiFindMoveOptions = {
+  difficulty?: LexioAIDifficulty;
+  currentPlayerId?: number;
+  players?: AiPlayerSnapshot[];
+  discardedTiles?: LexioTile[];
+  tablePlay?: LexioCombination | null;
+  playerCount?: number;
+};
+
+type AiThreatLevel = 'none' | 'low' | 'medium' | 'high';
+
+type AiThreatInfo = {
+  level: AiThreatLevel;
+  minOpponentCards: number;
+};
+
+type LeadCombos = {
+  singles: LexioCombination[];
+  pairs: LexioCombination[];
+  triples: LexioCombination[];
+  fives: LexioCombination[];
+};
+
+function gatherLeadCombos(sorted: LexioTile[]): LeadCombos {
+  return {
+    singles: enumerateCombos(sorted, 1).sort((a, b) => a.value - b.value),
+    pairs: enumerateCombos(sorted, 2).sort((a, b) => a.value - b.value),
+    triples: enumerateCombos(sorted, 3).sort((a, b) => a.value - b.value),
+    fives: enumerateCombos(sorted, 5).sort((a, b) => a.value - b.value),
+  };
+}
+
+function getAiThreatInfo(
+  players: AiPlayerSnapshot[] | undefined,
+  currentPlayerId: number | undefined,
+): AiThreatInfo {
+  if (!players?.length) {
+    return { level: 'none', minOpponentCards: Infinity };
+  }
+  const opponents = players.filter(
+    (p) => p.handCount > 0 && p.id !== currentPlayerId,
+  );
+  if (opponents.length === 0) {
+    return { level: 'none', minOpponentCards: Infinity };
+  }
+  const minOpponentCards = Math.min(...opponents.map((p) => p.handCount));
+  if (minOpponentCards <= 1) return { level: 'high', minOpponentCards };
+  if (minOpponentCards === 2) return { level: 'medium', minOpponentCards };
+  if (minOpponentCards === 3) return { level: 'low', minOpponentCards };
+  return { level: 'none', minOpponentCards };
+}
+
+function maxNumberForPlayerCount(playerCount: number): number {
+  const n = Math.min(5, Math.max(3, Math.floor(playerCount)));
+  return n <= 3 ? 9 : n === 4 ? 13 : 15;
+}
+
+/** 숫자별로 상대 손에 남아 있을 수 있는 장수 (0~4) */
+export function buildRemainingCountByNumber(
   hand: LexioTile[],
-  target: LexioCombination | null,
+  discardedTiles: LexioTile[],
+  tablePlay: LexioCombination | null | undefined,
+  playerCount: number,
+): Map<number, number> {
+  const maxNum = maxNumberForPlayerCount(playerCount);
+  const seen = new Map<number, number>();
+  const mark = (t: LexioTile) => {
+    seen.set(t.number, (seen.get(t.number) ?? 0) + 1);
+  };
+  for (const t of hand) mark(t);
+  for (const t of discardedTiles) mark(t);
+  if (tablePlay) for (const t of tablePlay.tiles) mark(t);
+
+  const remaining = new Map<number, number>();
+  for (let num = 1; num <= maxNum; num++) {
+    remaining.set(num, Math.max(0, 4 - (seen.get(num) ?? 0)));
+  }
+  return remaining;
+}
+
+function comboUsesPremiumTile(combo: LexioCombination): boolean {
+  return combo.tiles.some((t) => t.number === 1 || t.number === 2);
+}
+
+function countLeadFlexibility(hand: LexioTile[]): number {
+  if (hand.length === 0) return 0;
+  const singles = enumerateCombos(hand, 1).length;
+  const pairs = enumerateCombos(hand, 2).length;
+  const triples = enumerateCombos(hand, 3).length;
+  return singles + pairs * 2 + triples * 3;
+}
+
+function remainingAfterLead(
+  hand: LexioTile[],
+  lead: LexioCombination,
+): LexioTile[] {
+  const ids = new Set(lead.tiles.map((t) => t.id));
+  return hand.filter((t) => !ids.has(t.id));
+}
+
+function pickMostFlexibleLead(
+  hand: LexioTile[],
+  candidates: LexioCombination[],
+): LexioTile[] {
+  let best = candidates[0];
+  let bestScore = -1;
+  for (const c of candidates) {
+    const score = countLeadFlexibility(remainingAfterLead(hand, c));
+    if (score > bestScore) {
+      bestScore = score;
+      best = c;
+    }
+  }
+  return best.tiles;
+}
+
+function shouldSpendFiveCombo(
+  handLength: number,
+  threat: AiThreatLevel,
+  difficulty: LexioAIDifficulty,
+): boolean {
+  if (threat === 'high' || threat === 'medium') return true;
+  if (handLength <= 4) return true;
+  if (difficulty === 'hard') return false;
+  return handLength <= 6;
+}
+
+function aiLeadMoveEasy(sorted: LexioTile[]): LexioTile[] | null {
+  const { singles, pairs, triples, fives } = gatherLeadCombos(sorted);
+
+  if (fives.length > 0 && Math.random() < 0.35) {
+    return fives[0].tiles;
+  }
+  if (triples.length > 0 && Math.random() < 0.55) {
+    return triples[0].tiles;
+  }
+  if (pairs.length > 0 && Math.random() < 0.65) {
+    return pairs[0].tiles;
+  }
+
+  if (singles.length > 0) return singles[0].tiles;
+  if (pairs.length > 0) return pairs[0].tiles;
+  if (triples.length > 0) return triples[0].tiles;
+  if (fives.length > 0) return fives[0].tiles;
+  return null;
+}
+
+/** 손패가 많을 때 큰 조합 보존 */
+function aiLeadMoveEasyConserving(sorted: LexioTile[]): LexioTile[] | null {
+  const { singles, pairs, triples, fives } = gatherLeadCombos(sorted);
+
+  if (fives.length > 0 && Math.random() < 0.15) return fives[0].tiles;
+  if (triples.length > 0 && Math.random() < 0.3) return triples[0].tiles;
+  if (pairs.length > 0 && Math.random() < 0.45) return pairs[0].tiles;
+
+  if (singles.length > 0) return singles[0].tiles;
+  if (pairs.length > 0) return pairs[0].tiles;
+  if (triples.length > 0) return triples[0].tiles;
+  if (fives.length > 0) return fives[0].tiles;
+  return null;
+}
+
+function aiLeadMoveThreatBlock(
+  sorted: LexioTile[],
+  threat: AiThreatLevel,
+  difficulty: LexioAIDifficulty,
 ): LexioTile[] | null {
-  if (hand.length === 0) return null;
-  const sorted = sortHand(hand);
+  const { singles, pairs, triples, fives } = gatherLeadCombos(sorted);
+  const useFives = shouldSpendFiveCombo(sorted.length, threat, difficulty);
 
-  if (!target) {
-    const singles = enumerateCombos(sorted, 1).sort((a, b) => a.value - b.value);
-    const pairs = enumerateCombos(sorted, 2).sort((a, b) => a.value - b.value);
-    const triples = enumerateCombos(sorted, 3).sort((a, b) => a.value - b.value);
-    const fives = enumerateCombos(sorted, 5).sort((a, b) => a.value - b.value);
-
-    // 큰 조합부터 확률 기반으로 우선 사용.
-    //  - 5장(풀하우스/플러시/스트레이트 등) ≈ 35%
-    //  - 트리플 ≈ 55%
-    //  - 페어 ≈ 65%
-    //  - 그 외(=단일) fallback
-    if (fives.length > 0 && Math.random() < 0.35) {
-      return fives[0].tiles;
-    }
-    if (triples.length > 0 && Math.random() < 0.55) {
-      return triples[0].tiles;
-    }
-    if (pairs.length > 0 && Math.random() < 0.65) {
-      return pairs[0].tiles;
-    }
-
-    // fallback: 가장 약한 단일 → 없으면 더 큰 조합 순서로
-    if (singles.length > 0) return singles[0].tiles;
-    if (pairs.length > 0) return pairs[0].tiles;
+  if (threat === 'high') {
+    if (useFives && fives.length > 0) return fives[0].tiles;
     if (triples.length > 0) return triples[0].tiles;
-    if (fives.length > 0) return fives[0].tiles;
+    if (pairs.length > 0) return pairs[0].tiles;
+    if (singles.length > 0) return singles[singles.length - 1].tiles;
     return null;
   }
 
+  if (threat === 'medium') {
+    if (useFives && fives.length > 0) return fives[0].tiles;
+    if (triples.length > 0) return triples[0].tiles;
+    if (pairs.length > 0) return pairs[0].tiles;
+    if (singles.length > 0) return singles[singles.length - 1].tiles;
+    return null;
+  }
+
+  // low — 페어·트리플 우선, 싱글은 중상위
+  if (pairs.length > 0) return pairs[0].tiles;
+  if (triples.length > 0) return triples[0].tiles;
+  if (singles.length > 0) {
+    const mid = singles[Math.floor(singles.length * 0.65)];
+    return mid.tiles;
+  }
+  if (fives.length > 0 && useFives) return fives[0].tiles;
+  return null;
+}
+
+function aiLeadMoveHardCounting(
+  sorted: LexioTile[],
+  remainingByNumber: Map<number, number>,
+  threat: AiThreatInfo,
+): LexioTile[] | null {
+  const { singles, pairs, triples, fives } = gatherLeadCombos(sorted);
+  const useFives = shouldSpendFiveCombo(
+    sorted.length,
+    threat.level,
+    'hard',
+  );
+
+  if (threat.level !== 'none') {
+    return aiLeadMoveThreatBlock(sorted, threat.level, 'hard');
+  }
+
+  const comboCandidates: LexioCombination[] = [];
+  if (useFives && fives.length > 0) comboCandidates.push(fives[0]);
+  if (pairs.length > 0) comboCandidates.push(pairs[0]);
+  if (triples.length > 0 && sorted.length <= 7) comboCandidates.push(triples[0]);
+
+  if (comboCandidates.length > 0) {
+    return pickMostFlexibleLead(sorted, comboCandidates);
+  }
+
+  if (singles.length > 0) {
+    const scored = [...singles].sort((a, b) => {
+      const remA = remainingByNumber.get(a.tiles[0].number) ?? 4;
+      const remB = remainingByNumber.get(b.tiles[0].number) ?? 4;
+      if (remA !== remB) return remA - remB;
+      return a.value - b.value;
+    });
+    return scored[0].tiles;
+  }
+
+  if (triples.length > 0) return triples[0].tiles;
+  if (fives.length > 0) return fives[0].tiles;
+  return null;
+}
+
+function aiLeadMove(
+  sorted: LexioTile[],
+  difficulty: LexioAIDifficulty,
+  threat: AiThreatInfo,
+  remainingByNumber: Map<number, number>,
+): LexioTile[] | null {
+  if (difficulty === 'hard') {
+    return aiLeadMoveHardCounting(sorted, remainingByNumber, threat);
+  }
+
+  if (difficulty === 'medium') {
+    if (threat.level !== 'none') {
+      return aiLeadMoveThreatBlock(sorted, threat.level, 'medium');
+    }
+    if (sorted.length >= 8) {
+      return aiLeadMoveEasyConserving(sorted);
+    }
+    return aiLeadMoveEasy(sorted);
+  }
+
+  return aiLeadMoveEasy(sorted);
+}
+
+function sortValidFollowMoves(
+  valid: LexioCombination[],
+  target: LexioCombination,
+  preferStrong: boolean,
+): LexioCombination[] {
+  const size = target.tiles.length;
+  return [...valid].sort((a, b) => {
+    if (preferStrong && size === 1) return b.value - a.value;
+    if (preferStrong) return b.value - a.value;
+    return a.value - b.value;
+  });
+}
+
+function shouldPassExpensiveWin(
+  combo: LexioCombination,
+  threat: AiThreatInfo,
+  difficulty: LexioAIDifficulty,
+  handLength: number,
+): boolean {
+  if (handLength <= combo.tiles.length) return false;
+  if (threat.minOpponentCards <= 3) return false;
+  if (!comboUsesPremiumTile(combo)) return false;
+  if (difficulty === 'hard') return threat.minOpponentCards >= 4;
+  if (difficulty === 'medium') return threat.minOpponentCards >= 5;
+  return false;
+}
+
+function aiFollowMove(
+  sorted: LexioTile[],
+  target: LexioCombination,
+  difficulty: LexioAIDifficulty,
+  threat: AiThreatInfo,
+): LexioTile[] | null {
   const size = target.tiles.length;
   const candidates = enumerateCombos(sorted, size);
   const valid = candidates.filter((c) => beats(c, target));
-
   if (valid.length === 0) return null;
-  valid.sort((a, b) => a.value - b.value);
-  return valid[0].tiles;
+
+  const winsGame = sorted.length === size;
+  if (winsGame) return valid[0].tiles;
+
+  const preferStrong =
+    difficulty !== 'easy' &&
+    (threat.level === 'high' ||
+      threat.level === 'medium' ||
+      (threat.level === 'low' && difficulty === 'hard'));
+
+  const ranked = sortValidFollowMoves(valid, target, preferStrong);
+  const pick = ranked[0];
+
+  if (
+    !preferStrong &&
+    shouldPassExpensiveWin(pick, threat, difficulty, sorted.length)
+  ) {
+    return null;
+  }
+
+  if (
+    preferStrong &&
+    difficulty === 'hard' &&
+    threat.level === 'none' &&
+    shouldPassExpensiveWin(pick, threat, difficulty, sorted.length)
+  ) {
+    const cheaper = ranked.find(
+      (c) => !shouldPassExpensiveWin(c, threat, difficulty, sorted.length),
+    );
+    if (cheaper) return cheaper.tiles;
+    return null;
+  }
+
+  return pick.tiles;
+}
+
+/** 리드 fallback용 단일 타일 */
+export function aiLeadFallbackTile(
+  hand: LexioTile[],
+  options?: AiFindMoveOptions,
+): LexioTile {
+  const sorted = sortHand(hand);
+  const difficulty = options?.difficulty ?? 'easy';
+  const threat = getAiThreatInfo(options?.players, options?.currentPlayerId);
+  const preferHigh =
+    difficulty !== 'easy' &&
+    (threat.level === 'high' ||
+      threat.level === 'medium' ||
+      (threat.level === 'low' && difficulty === 'hard'));
+  return preferHigh ? sorted[sorted.length - 1] : sorted[0];
+}
+
+// AI: 현재 트릭을 이길 수 있는 조합 반환, 없으면 null(패스)
+export function aiFindMove(
+  hand: LexioTile[],
+  target: LexioCombination | null,
+  options?: AiFindMoveOptions,
+): LexioTile[] | null {
+  if (hand.length === 0) return null;
+  const sorted = sortHand(hand);
+  const difficulty = options?.difficulty ?? 'easy';
+  const threat = getAiThreatInfo(options?.players, options?.currentPlayerId);
+  const playerCount = options?.playerCount ?? 5;
+  const remainingByNumber = buildRemainingCountByNumber(
+    hand,
+    options?.discardedTiles ?? [],
+    options?.tablePlay ?? target,
+    playerCount,
+  );
+
+  if (!target) {
+    return aiLeadMove(sorted, difficulty, threat, remainingByNumber);
+  }
+
+  return aiFollowMove(sorted, target, difficulty, threat);
 }
 
 // 첫 시작 플레이어 찾기 (가장 약한 타일을 가진 사람)

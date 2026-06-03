@@ -30,8 +30,10 @@ import {
   beats,
   comboKorean,
   aiFindMove,
+  aiLeadFallbackTile,
   findStarterIndex,
   roundCoinForHand,
+  type LexioAIDifficulty,
 } from '../utils/lexio';
 import LexioFirstPersonScene from './lexio/LexioFirstPersonScene';
 import LexioOfflineSetup from './lexio/LexioOfflineSetup';
@@ -65,6 +67,8 @@ type PersistedLexioState = {
   sessionCompletedRounds: number;
   sessionCoinsByPlayerId: Record<string, number>;
   lastRoundCoinRows: LastRoundCoinRow[];
+  discardedTiles?: LexioTile[];
+  offlineAiDifficulty?: LexioAIDifficulty;
   /** v2 이하 마이그레이션용 */
   humanCoinTotal?: number;
   lastRoundCoinEarned?: number;
@@ -256,11 +260,16 @@ export default function Lexio() {
   const [discardPlacements, setDiscardPlacements] = useState<
     DiscardPlacement[]
   >([]);
+  const [discardedTiles, setDiscardedTiles] = useState<LexioTile[]>([]);
   const [hasHydrated, setHasHydrated] = useState(false);
   const discardSeqRef = useRef(0);
   const [pendingSessionRounds, setPendingSessionRounds] = useState(5);
   const [pendingAiCount, setPendingAiCount] = useState(MAX_OFFLINE_AI);
+  const [pendingAiDifficulty, setPendingAiDifficulty] =
+    useState<LexioAIDifficulty>('easy');
   const [offlineAiCount, setOfflineAiCount] = useState(MAX_OFFLINE_AI);
+  const [offlineAiDifficulty, setOfflineAiDifficulty] =
+    useState<LexioAIDifficulty>('easy');
   const [sessionTotalRounds, setSessionTotalRounds] = useState(5);
   const [sessionCompletedRounds, setSessionCompletedRounds] = useState(0);
   const [sessionCoinsByPlayerId, setSessionCoinsByPlayerId] = useState<
@@ -276,6 +285,7 @@ export default function Lexio() {
     if (tiles.length === 0) return;
     discardSeqRef.current += 1;
     const seq = discardSeqRef.current;
+    setDiscardedTiles((prev) => [...prev, ...tiles]);
     setDiscardPlacements((prev) => [
       ...prev,
       ...buildDiscardPlacements(tiles, seq, prev),
@@ -296,6 +306,7 @@ export default function Lexio() {
     setSelectedIds([]);
     setLastPlayedByIdx(null);
     setDiscardPlacements([]);
+    setDiscardedTiles([]);
     setMessage('');
   }, [offlineAiCount]);
 
@@ -310,6 +321,7 @@ export default function Lexio() {
       Math.max(MIN_OFFLINE_AI, Math.floor(pendingAiCount)),
     );
     setOfflineAiCount(aiCount);
+    setOfflineAiDifficulty(pendingAiDifficulty);
     setSessionTotalRounds(rounds);
     setSessionCompletedRounds(0);
     setSessionCoinsByPlayerId({});
@@ -325,8 +337,9 @@ export default function Lexio() {
     setSelectedIds([]);
     setLastPlayedByIdx(null);
     setDiscardPlacements([]);
+    setDiscardedTiles([]);
     setMessage('');
-  }, [pendingSessionRounds, pendingAiCount]);
+  }, [pendingSessionRounds, pendingAiCount, pendingAiDifficulty]);
 
   const resetSessionToSetup = useCallback(() => {
     setPlayers([]);
@@ -338,6 +351,7 @@ export default function Lexio() {
     setSelectedIds([]);
     setLastPlayedByIdx(null);
     setDiscardPlacements([]);
+    setDiscardedTiles([]);
     setMessage('');
     setSessionCompletedRounds(0);
     setSessionCoinsByPlayerId({});
@@ -527,6 +541,9 @@ export default function Lexio() {
       setMessage(saved.message ?? '');
       setLastPlayedByIdx(saved.lastPlayedByIdx ?? null);
       setDiscardPlacements(saved.discardPlacements ?? []);
+      setDiscardedTiles(
+        Array.isArray(saved.discardedTiles) ? saved.discardedTiles : [],
+      );
       const tr =
         typeof saved.sessionTotalRounds === 'number'
           ? Math.min(
@@ -565,6 +582,14 @@ export default function Lexio() {
             )
           : [],
       );
+      if (
+        saved.offlineAiDifficulty === 'easy' ||
+        saved.offlineAiDifficulty === 'medium' ||
+        saved.offlineAiDifficulty === 'hard'
+      ) {
+        setOfflineAiDifficulty(saved.offlineAiDifficulty);
+        setPendingAiDifficulty(saved.offlineAiDifficulty);
+      }
     } catch {
       window.localStorage.removeItem(LEXIO_STORAGE_KEY);
     } finally {
@@ -586,10 +611,12 @@ export default function Lexio() {
       message,
       lastPlayedByIdx,
       discardPlacements,
+      discardedTiles,
       sessionTotalRounds,
       sessionCompletedRounds,
       sessionCoinsByPlayerId,
       lastRoundCoinRows,
+      offlineAiDifficulty,
     };
     window.localStorage.setItem(LEXIO_STORAGE_KEY, JSON.stringify(toSave));
   }, [
@@ -604,11 +631,31 @@ export default function Lexio() {
     message,
     lastPlayedByIdx,
     discardPlacements,
+    discardedTiles,
     sessionTotalRounds,
     sessionCompletedRounds,
     sessionCoinsByPlayerId,
     lastRoundCoinRows,
+    offlineAiDifficulty,
   ]);
+
+  const aiMoveOptions = useMemo(
+    () => ({
+      difficulty: offlineAiDifficulty,
+      currentPlayerId: players[currentPlayerIdx]?.id,
+      players: players.map((p) => ({ id: p.id, handCount: p.hand.length })),
+      discardedTiles,
+      tablePlay: currentPlay,
+      playerCount: players.length,
+    }),
+    [
+      offlineAiDifficulty,
+      players,
+      currentPlayerIdx,
+      discardedTiles,
+      currentPlay,
+    ],
+  );
 
   // AI 자동 진행
   useEffect(() => {
@@ -617,15 +664,14 @@ export default function Lexio() {
     if (!current || !current.isAI) return;
 
     const timer = setTimeout(() => {
-      const move = aiFindMove(current.hand, currentPlay);
+      const move = aiFindMove(current.hand, currentPlay, aiMoveOptions);
       if (move === null) {
         if (currentPlay) {
           doPass(currentPlayerIdx);
-        } else {
-          // 리드인데 못 만들 경우 (사실상 없음) - 가장 낮은 단일
-          if (current.hand.length > 0) {
-            doPlay(currentPlayerIdx, [sortHand(current.hand)[0]]);
-          }
+        } else if (current.hand.length > 0) {
+          doPlay(currentPlayerIdx, [
+            aiLeadFallbackTile(current.hand, aiMoveOptions),
+          ]);
         }
       } else {
         doPlay(currentPlayerIdx, move);
@@ -641,6 +687,7 @@ export default function Lexio() {
     trickStarterIdx,
     doPlay,
     doPass,
+    aiMoveOptions,
   ]);
 
   const humanIdx = players.findIndex((p) => !p.isAI);
@@ -1364,6 +1411,8 @@ export default function Lexio() {
             minAiCount={MIN_OFFLINE_AI}
             maxAiCount={MAX_OFFLINE_AI}
             onAiCountChange={setPendingAiCount}
+            pendingAiDifficulty={pendingAiDifficulty}
+            onAiDifficultyChange={setPendingAiDifficulty}
             onStart={beginNewSessionFromSetup}
             onOpenRules={openLexioRules}
           />

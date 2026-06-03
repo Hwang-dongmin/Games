@@ -26,7 +26,7 @@ import {
 import LexioFirstPersonScene from './lexio/LexioFirstPersonScene';
 import LexioOnlineWelcomeOverlay from './lexio/LexioOnlineWelcomeOverlay';
 import LexioSessionRankingPanel from './lexio/LexioSessionRankingPanel';
-import { beats, comboKorean, detectCombo, aiFindMove, sortHand } from '../utils/lexio';
+import { beats, comboKorean, detectCombo, aiFindMove, aiLeadFallbackTile } from '../utils/lexio';
 import {
   buildOnlineFinishTableUi,
   clientViewToPlayers,
@@ -324,13 +324,35 @@ export default function LexioOnline() {
       const cur = gs.players[gs.currentPlayerIdx];
       if (!cur?.isAI) return;
 
-      const move = aiFindMove(cur.hand, gs.currentPlay);
+      const move = aiFindMove(cur.hand, gs.currentPlay, {
+        difficulty: 'medium',
+        currentPlayerId: cur.seat,
+        players: gs.players.map((p) => ({
+          id: p.seat,
+          handCount: p.hand.length,
+        })),
+        discardedTiles: gs.discardedTiles,
+        tablePlay: gs.currentPlay,
+        playerCount: gs.players.length,
+      });
       let result;
       if (move === null) {
         if (gs.currentPlay) {
           result = applyPass(gs, cur.seat);
         } else if (cur.hand.length > 0) {
-          result = applyPlay(gs, cur.seat, [sortHand(cur.hand)[0]]);
+          result = applyPlay(gs, cur.seat, [
+            aiLeadFallbackTile(cur.hand, {
+              difficulty: 'medium',
+              currentPlayerId: cur.seat,
+              players: gs.players.map((p) => ({
+                id: p.seat,
+                handCount: p.hand.length,
+              })),
+              discardedTiles: gs.discardedTiles,
+              tablePlay: gs.currentPlay,
+              playerCount: gs.players.length,
+            }),
+          ]);
         } else {
           return;
         }

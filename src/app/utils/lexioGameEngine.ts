@@ -66,6 +66,7 @@ export type LexioGameState = {
   phase: LexioGamePhase;
   winnerSeat: number | null;
   discardPlacements: DiscardPlacement[];
+  discardedTiles: LexioTile[];
   sessionTotalRounds: number;
   sessionCompletedRounds: number;
   sessionCoinsBySeat: Record<number, number>;
@@ -88,6 +89,7 @@ export function createEmptyGameState(
     phase: 'lobby',
     winnerSeat: null,
     discardPlacements: [],
+    discardedTiles: [],
     sessionTotalRounds: Math.min(
       MAX_SESSION_ROUNDS,
       Math.max(1, sessionTotalRounds),
@@ -145,6 +147,7 @@ export function startNewRound(state: LexioGameState): LexioGameState {
     phase: 'playing',
     winnerSeat: null,
     discardPlacements: [],
+    discardedTiles: [],
     lastRoundCoinRows: [],
   };
 }
@@ -152,11 +155,21 @@ export function startNewRound(state: LexioGameState): LexioGameState {
 function appendDiscardTiles(
   state: LexioGameState,
   tiles: LexioTile[],
-): DiscardPlacement[] {
-  if (tiles.length === 0) return state.discardPlacements;
+): { discardPlacements: DiscardPlacement[]; discardedTiles: LexioTile[]; discardSeq: number } {
+  if (tiles.length === 0) {
+    return {
+      discardPlacements: state.discardPlacements,
+      discardedTiles: state.discardedTiles,
+      discardSeq: state.discardSeq,
+    };
+  }
   const seq = state.discardSeq + 1;
   const additions = buildDiscardPlacements(tiles, seq, state.discardPlacements);
-  return [...state.discardPlacements, ...additions];
+  return {
+    discardPlacements: [...state.discardPlacements, ...additions],
+    discardedTiles: [...state.discardedTiles, ...tiles],
+    discardSeq: seq,
+  };
 }
 
 export function nextSeatIndex(
@@ -225,10 +238,13 @@ export function applyPlay(
   }
 
   let discardPlacements = state.discardPlacements;
+  let discardedTiles = state.discardedTiles;
   let discardSeq = state.discardSeq;
   if (state.currentPlay?.tiles?.length) {
-    discardPlacements = appendDiscardTiles(state, state.currentPlay.tiles);
-    discardSeq = state.discardSeq + 1;
+    const appended = appendDiscardTiles(state, state.currentPlay.tiles);
+    discardPlacements = appended.discardPlacements;
+    discardedTiles = appended.discardedTiles;
+    discardSeq = appended.discardSeq;
   }
 
   const players = state.players.map((p, idx) =>
@@ -247,6 +263,7 @@ export function applyPlay(
     currentPlay: combo,
     trickStarterIdx: seat,
     discardPlacements,
+    discardedTiles,
     discardSeq,
   };
 
@@ -283,10 +300,7 @@ export function applyPass(state: LexioGameState, seat: number): PlayResult {
     next === trickStarter &&
     state.currentPlay !== null
   ) {
-    const discardPlacements = appendDiscardTiles(
-      state,
-      state.currentPlay.tiles,
-    );
+    const appended = appendDiscardTiles(state, state.currentPlay.tiles);
     const reset = players.map((p) => ({ ...p, passed: false }));
     return {
       ok: true,
@@ -296,8 +310,9 @@ export function applyPass(state: LexioGameState, seat: number): PlayResult {
         currentPlay: null,
         trickStarterIdx: null,
         currentPlayerIdx: next,
-        discardPlacements,
-        discardSeq: state.discardSeq + 1,
+        discardPlacements: appended.discardPlacements,
+        discardedTiles: appended.discardedTiles,
+        discardSeq: appended.discardSeq,
       },
     };
   }
