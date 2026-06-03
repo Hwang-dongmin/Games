@@ -1,6 +1,7 @@
 import { Link } from 'react-router';
-import { Gamepad2, Grid2x2, Zap, Spade, Layers, Wifi } from 'lucide-react';
+import { Gamepad2, Grid2x2, Zap, Spade, Layers } from 'lucide-react';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
+import LexioHomeCard from '../components/LexioHomeCard';
 
 const games = [
   {
@@ -33,20 +34,12 @@ const games = [
   {
     id: 'lexio',
     title: '렉시오',
-    description: '4명의 AI와 즐기는 5인 한국식 셰딩 게임',
+    description: 'AI 오프라인 또는 친구와 온라인 멀티플레이',
     icon: Layers,
     path: '/lexio',
     color: 'from-purple-600 to-indigo-700',
     image: 'https://images.unsplash.com/photo-1606503153255-59d8b8b82176?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-  },
-  {
-    id: 'lexio-online',
-    title: '렉시오 온라인',
-    description: '방 코드로 친구와 P2P 멀티플레이 (로그인 불필요)',
-    icon: Wifi,
-    path: '/lexio/online',
-    color: 'from-violet-600 to-fuchsia-700',
-    image: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+    splitMode: true as const,
   },
 ];
 
@@ -68,6 +61,10 @@ export default function Home() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {games.map((game) => {
+            if ('splitMode' in game && game.splitMode) {
+              return <LexioHomeCard key={game.id} />;
+            }
+
             const Icon = game.icon;
             return (
               <Link
