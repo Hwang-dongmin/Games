@@ -8,6 +8,7 @@ import React, {
 import { motion } from 'motion/react';
 import { ChevronDown, ChevronUp, Crown } from 'lucide-react';
 import type { LexioPlayerFinishCoins } from './LexioFirstPersonScene';
+import LexioVictoryFireworks from './LexioVictoryFireworks';
 
 export type LexioSessionRankEntry = {
   rank: number;
@@ -90,6 +91,10 @@ export default function LexioSessionRankingPanel({
       ? `${winners[0].name} 승리!`
       : `${winners.map((w) => w.name).join(', ')} 공동 1위!`;
 
+  const humanIsFirst =
+    humanPlayerId !== undefined &&
+    rankings.some((r) => r.playerId === humanPlayerId && r.rank === topRank);
+
   const liftY = collapsed && listHeight > 0 ? -listHeight / 2 : 0;
 
   return (
@@ -101,6 +106,8 @@ export default function LexioSessionRankingPanel({
         transition={{ duration: DURATION, ease: EASE }}
         aria-hidden
       />
+
+      <LexioVictoryFireworks active={humanIsFirst} />
 
       <div className="pointer-events-none fixed inset-0 z-[16] flex items-center justify-center px-4">
         <motion.div
