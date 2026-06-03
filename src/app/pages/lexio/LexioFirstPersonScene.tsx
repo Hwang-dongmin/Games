@@ -9,6 +9,10 @@ import React, {
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { layoutHandTiles3D } from '../../utils/lexioHandLayout';
 import { LEXIO_CENTER_PLAY_TABLE_Z } from '../../utils/lexioTableLayout';
+import {
+  discardTileContactGroupY,
+  getRoundedTileGeometry,
+} from '../../utils/lexioTileGeometry';
 import { Billboard, ContactShadows, Html, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import type {
@@ -91,54 +95,7 @@ const TILE_STONE_MAT = {
   roughness: 0.5,
 } as const;
 
-/** 돌 패 모서리 — ExtrudeGeometry + 라운딩 실루엣 */
-const tileRoundedGeomCache = new Map<string, THREE.BufferGeometry>();
-
-function getRoundedTileGeometry(
-  width: number,
-  height: number,
-  depth: number,
-): THREE.BufferGeometry {
-  const hw = width / 2;
-  const hh = height / 2;
-  const cr = Math.min(
-    Math.min(width, height) * 0.1,
-    hw * 0.44,
-    hh * 0.36,
-  );
-  const key = `${width.toFixed(6)}_${height.toFixed(6)}_${depth.toFixed(6)}_${cr.toFixed(6)}`;
-  const cached = tileRoundedGeomCache.get(key);
-  if (cached) return cached;
-
-  const shape = new THREE.Shape();
-  shape.moveTo(-hw + cr, -hh);
-  shape.lineTo(hw - cr, -hh);
-  shape.absarc(hw - cr, -hh + cr, cr, -Math.PI / 2, 0, false);
-  shape.lineTo(hw, hh - cr);
-  shape.absarc(hw - cr, hh - cr, cr, 0, Math.PI / 2, false);
-  shape.lineTo(-hw + cr, hh);
-  shape.absarc(-hw + cr, hh - cr, cr, Math.PI / 2, Math.PI, false);
-  shape.lineTo(-hw, -hh + cr);
-  shape.absarc(-hw + cr, -hh + cr, cr, Math.PI, Math.PI * 1.5, false);
-
-  const bevelTh = Math.min(depth * 0.09, cr * 0.5);
-  const bevelSz = Math.min(cr * 0.38, depth * 0.075);
-
-  const geom = new THREE.ExtrudeGeometry(shape, {
-    depth,
-    bevelEnabled: bevelTh > 0.002,
-    bevelThickness: bevelTh,
-    bevelSize: bevelSz,
-    bevelSegments: 4,
-    steps: 1,
-    curveSegments: 20,
-  });
-  geom.computeVertexNormals();
-  geom.center();
-  tileRoundedGeomCache.set(key, geom);
-  return geom;
-}
-
+/** 돌 패 모서리 — ExtrudeGeometry + 라운딩 실루엣 (lexioTileGeometry) */
 const LEXIO_TILE_ROUNDED_GEOM = getRoundedTileGeometry(TILE_W, TILE_H, TILE_T);
 const LEXIO_DISCARD_ROUNDED_GEOM = getRoundedTileGeometry(
   TILE_W * 0.88,
@@ -568,8 +525,16 @@ function DiscardFaceDownTile({
       : placement.ry
     : placement.ry;
 
+  const groupY = discardTileContactGroupY(
+    LEXIO_DISCARD_ROUNDED_GEOM,
+    isFlat,
+    spin,
+    TABLE_TOP_Y,
+    TABLE_SURFACE_EPS,
+  );
+
   return (
-    <group position={[placement.x, placement.y, placement.z]}>
+    <group position={[placement.x, groupY, placement.z]}>
       {isFlat ? (
         <group rotation={[-Math.PI / 2, 0, spin]}>
           <DiscardFaceDownMesh />

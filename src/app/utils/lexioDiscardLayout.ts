@@ -1,5 +1,9 @@
 import type { LexioTile } from './lexio';
 import { LEXIO_CENTER_PLAY_TABLE_Z } from './lexioTableLayout';
+import {
+  discardTileContactGroupY,
+  getRoundedTileGeometry,
+} from './lexioTileGeometry';
 
 export type DiscardPlacement = {
   key: string;
@@ -58,6 +62,12 @@ type DiscardZone = {
   minZ: number;
   maxZ: number;
 };
+
+const DISCARD_GEOM = getRoundedTileGeometry(
+  DISCARD_TILE_W,
+  DISCARD_TILE_H,
+  TILE_T,
+);
 
 type DiscardPose = 'flat' | 'stand';
 
@@ -308,64 +318,21 @@ function sampleRotationForPose(
   return { rx: 0, ry: spin, rz: 0 };
 }
 
-/** Three.js Euler 'XYZ' */
-function rotateCornerXYZ(
-  lx: number,
-  ly: number,
-  lz: number,
-  rx: number,
-  ry: number,
-  rz: number,
-): [number, number, number] {
-  const cx = Math.cos(rx);
-  const sx = Math.sin(rx);
-  const y1 = ly * cx + lz * sx;
-  const z1 = -ly * sx + lz * cx;
-  const x1 = lx;
-
-  const cy = Math.cos(ry);
-  const sy = Math.sin(ry);
-  const x2 = x1 * cy + z1 * sy;
-  const y2 = y1;
-  const z2 = -x1 * sy + z1 * cy;
-
-  const cz = Math.cos(rz);
-  const sz = Math.sin(rz);
-  const x3 = x2 * cz - y2 * sz;
-  const y3 = x2 * sz + y2 * cz;
-  return [x3, y3, z2];
-}
-
-function discardYExtents(
-  rx: number,
-  ry: number,
-  rz: number,
-): { min: number; max: number } {
-  const hw = DISCARD_TILE_W / 2;
-  const hh = DISCARD_TILE_H / 2;
-  const ht = TILE_T / 2;
-  let ymin = Infinity;
-  let ymax = -Infinity;
-  for (const lx of [-hw, hw]) {
-    for (const ly of [-hh, hh]) {
-      for (const lz of [-ht, ht]) {
-        const [, y3] = rotateCornerXYZ(lx, ly, lz, rx, ry, rz);
-        ymin = Math.min(ymin, y3);
-        ymax = Math.max(ymax, y3);
-      }
-    }
-  }
-  return { min: ymin, max: ymax };
-}
-
 function computeDiscardY(
-  rx: number,
-  ry: number,
-  rz: number,
+  pose: DiscardPose,
+  spin: number,
   rnd: () => number,
 ): number {
-  const ext = discardYExtents(rx, ry, rz);
-  return TABLE_TOP_Y + TABLE_SURFACE_EPS - ext.min + rnd() * 0.002;
+  return (
+    discardTileContactGroupY(
+      DISCARD_GEOM,
+      pose === 'flat',
+      spin,
+      TABLE_TOP_Y,
+      TABLE_SURFACE_EPS,
+    ) +
+    rnd() * 0.002
+  );
 }
 
 export function buildDiscardPlacements(
@@ -383,7 +350,8 @@ export function buildDiscardPlacements(
     const pose = pickPose(rnd);
     const [x, z] = pickDiscardXZ(rnd, placed, globalIndex);
     const { rx, ry, rz } = sampleRotationForPose(pose, rnd);
-    const y = computeDiscardY(rx, ry, rz, rnd);
+    const spin = pose === 'flat' ? rz : ry;
+    const y = computeDiscardY(pose, spin, rnd);
 
     const placement: DiscardPlacement = {
       key: `discard-${t.id}-s${seq}-i${i}`,
