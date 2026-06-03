@@ -4,6 +4,7 @@ import Game2048 from "./pages/Game2048";
 import SnakeGame from "./pages/SnakeGame";
 import TexasHoldem from "./pages/TexasHoldem";
 import Lexio from "./pages/Lexio";
+import LexioOnline from "./pages/LexioOnline";
 
 export const router = createBrowserRouter([
   {
@@ -25,5 +26,9 @@ export const router = createBrowserRouter([
   {
     path: "/lexio",
     Component: Lexio,
+  },
+  {
+    path: "/lexio/online",
+    Component: LexioOnline,
   },
 ]);

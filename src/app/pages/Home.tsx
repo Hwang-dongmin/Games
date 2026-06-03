@@ -1,5 +1,5 @@
 import { Link } from 'react-router';
-import { Gamepad2, Grid2x2, Zap, Spade, Layers } from 'lucide-react';
+import { Gamepad2, Grid2x2, Zap, Spade, Layers, Wifi } from 'lucide-react';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
 
 const games = [
@@ -38,6 +38,15 @@ const games = [
     path: '/lexio',
     color: 'from-purple-600 to-indigo-700',
     image: 'https://images.unsplash.com/photo-1606503153255-59d8b8b82176?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+  },
+  {
+    id: 'lexio-online',
+    title: '렉시오 온라인',
+    description: '방 코드로 친구와 P2P 멀티플레이 (로그인 불필요)',
+    icon: Wifi,
+    path: '/lexio/online',
+    color: 'from-violet-600 to-fuchsia-700',
+    image: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
   },
 ];
 

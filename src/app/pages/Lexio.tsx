@@ -1284,13 +1284,21 @@ export default function Lexio() {
               : 'mb-4'
           }`}
         >
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 rounded-full bg-white/[0.05] px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.4)] transition-colors duration-200 hover:bg-white/[0.12] hover:text-white hover:shadow-[inset_0_0_0_1px_rgba(168,85,247,0.7)]"
-          >
-            <Home className="w-4 h-4" />
-            홈
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 rounded-full bg-white/[0.05] px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.4)] transition-colors duration-200 hover:bg-white/[0.12] hover:text-white hover:shadow-[inset_0_0_0_1px_rgba(168,85,247,0.7)]"
+            >
+              <Home className="w-4 h-4" />
+              홈
+            </Link>
+            <Link
+              to="/lexio/online"
+              className="hidden sm:inline-flex rounded-full bg-white/[0.05] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-purple-200/90 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.35)] hover:bg-white/[0.1] hover:text-white"
+            >
+              온라인
+            </Link>
+          </div>
           <div className="text-center">
             <p className="text-[10px] tracking-[0.5em] text-purple-300/70 uppercase">
               Lexio
