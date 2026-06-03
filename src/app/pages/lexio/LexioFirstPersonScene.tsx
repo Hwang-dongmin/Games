@@ -135,11 +135,14 @@ const TILE_RENDER_ORDER: Record<'back' | 'single' | 'front', number> = {
   front: 8,
 };
 
-/** Html 오버레이 z-index — 앞줄이 뒤줄 카드 앞면 위에 오도록 */
-const TILE_HTML_Z: Record<'back' | 'single' | 'front', number> = {
-  back: 16777260,
-  single: 16777265,
-  front: 16777271,
+/** Html z-index [max, min] — drei가 거리로 보간. 줄별 범위가 겹치면 뒤줄이 앞줄을 덮을 수 있음 */
+const TILE_HTML_Z_RANGE: Record<
+  'back' | 'single' | 'front',
+  [number, number]
+> = {
+  back: [180, 100],
+  single: [320, 220],
+  front: [320, 220],
 };
 
 function LexioTile3D({
@@ -152,8 +155,6 @@ function LexioTile3D({
   facePointerHover = true,
   finishReveal = false,
   rowLayer = 'single',
-  occludeRefs,
-  stoneMeshRef,
 }: {
   tile: LexioTile;
   position: [number, number, number];
@@ -167,10 +168,6 @@ function LexioTile3D({
   finishReveal?: boolean;
   /** 손패 2줄일 때 앞·뒤 가림 순서 */
   rowLayer?: 'back' | 'single' | 'front';
-  /** 뒤줄 Html만 — 앞줄 돌 메시에 가릴 때 사용 (호버 hit-plane 제외) */
-  occludeRefs?: React.RefObject<THREE.Object3D | null>[];
-  /** 앞줄 돌 메시 ref — 뒤줄 Html occlude 대상 등록용 */
-  stoneMeshRef?: React.RefObject<THREE.Mesh | null>;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const liftSmoothed = useRef(0);
@@ -205,7 +202,7 @@ function LexioTile3D({
   const numberTwoHalo = finishReveal && tile.number === 2;
 
   const meshOrder = TILE_RENDER_ORDER[rowLayer];
-  const htmlZ = TILE_HTML_Z[rowLayer];
+  const htmlZRange = TILE_HTML_Z_RANGE[rowLayer];
 
   const setHover = (next: boolean) => {
     setHovered(next);
@@ -238,7 +235,6 @@ function LexioTile3D({
         </mesh>
       )}
       <mesh
-        ref={stoneMeshRef}
         castShadow
         receiveShadow
         geometry={LEXIO_TILE_ROUNDED_GEOM}
@@ -277,10 +273,7 @@ function LexioTile3D({
         /** 박스 폭(TILE_W=0.212)에 맞춰 앞면 DOM 스케일.
          *  DOM small 폭 49.6px ≈ 3D 박스 폭이 되도록 distanceFactor를 보정. */
         distanceFactor={1.55}
-        occlude={
-          occludeRefs && occludeRefs.length > 0 ? occludeRefs : false
-        }
-        zIndexRange={[htmlZ, 0]}
+        zIndexRange={htmlZRange}
         renderOrder={meshOrder + 1}
         style={{ pointerEvents: 'none' }}
       >
@@ -876,29 +869,8 @@ function HandRow3D({
   const frontPlacements = placements.filter(
     (p) => p.rowLayer === 'front' || p.rowLayer === 'single',
   );
-  const frontPlacementKey = frontPlacements.map((p) => p.tile.id).join(',');
 
-  const frontStoneRefs = useMemo(
-    () =>
-      frontPlacements.map(() => React.createRef<THREE.Mesh | null>()),
-    [frontPlacementKey],
-  );
-
-  const backOccludeRefs = useMemo(
-    () =>
-      frontStoneRefs.length > 0
-        ? (frontStoneRefs as React.RefObject<THREE.Object3D | null>[])
-        : [],
-    [frontStoneRefs],
-  );
-
-  const renderPlacement = (
-    p: (typeof placements)[number],
-    options: {
-      useOcclude: boolean;
-      stoneMeshRef?: React.RefObject<THREE.Mesh | null>;
-    },
-  ) => {
+  const renderPlacement = (p: (typeof placements)[number]) => {
     const selected = selectedIds.includes(p.tile.id);
     return (
       <LexioTile3D
@@ -908,8 +880,6 @@ function HandRow3D({
         rotation={[0, 0, 0]}
         selected={selected}
         rowLayer={p.rowLayer}
-        occludeRefs={options.useOcclude ? backOccludeRefs : undefined}
-        stoneMeshRef={options.stoneMeshRef}
         onClick={enabled ? () => onToggle(p.tile.id) : undefined}
       />
     );
@@ -919,18 +889,11 @@ function HandRow3D({
     <group position={[0, TILE_CENTER_Y, 1.5]} rotation={[TILT_BACK, 0, 0]}>
       {backPlacements.length > 0 && (
         <group renderOrder={0}>
-          {backPlacements.map((p) =>
-            renderPlacement(p, { useOcclude: true }),
-          )}
+          {backPlacements.map((p) => renderPlacement(p))}
         </group>
       )}
       <group renderOrder={10}>
-        {frontPlacements.map((p, i) =>
-          renderPlacement(p, {
-            useOcclude: false,
-            stoneMeshRef: frontStoneRefs[i],
-          }),
-        )}
+        {frontPlacements.map((p) => renderPlacement(p))}
       </group>
     </group>
   );
