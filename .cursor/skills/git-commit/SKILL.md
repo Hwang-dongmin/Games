@@ -3,6 +3,7 @@ name: git-commit
 description: >-
   Create git commits when the user asks (커밋해줘, 커밋 해줘, commit, git commit,
   commit this). English subject; Korean body as short bullet list (plain tone).
+  Stage only files changed in the current agent session.
 ---
 
 # Git commit (English subject, Korean bullet body)
@@ -18,6 +19,30 @@ Apply when the user requests a commit (including **커밋해줘**).
 - Commit only when asked; never push unless asked
 - Never update `git config`, skip hooks, force push, hard reset, or commit secrets
 - Avoid `git commit --amend` unless the user requests it and amend preconditions are met
+- **Scope: current agent session only** — see below
+
+## Current-agent scope (mandatory)
+
+커밋에는 **이 대화(현재 에이전트 세션)에서 직접 수정·생성·삭제한 파일만** 포함한다. 다른 에이전트/다른 채팅에서 바뀐 파일은 넣지 않는다.
+
+### Session file list
+
+Before staging, build the list of paths this session owns:
+
+1. **Conversation** — every path touched by Write / StrReplace / Delete / EditNotebook (and explicit shell commands you ran that created or changed files) in **this** chat.
+2. **User scope** — if the user names specific files or a feature area, intersect with that list; do not expand beyond what they asked unless they say “전부”.
+3. **Do not infer** — `git status` alone is not enough; unrelated dirty files stay unstaged.
+
+### Staging rules
+
+- Use **`git add <path>`** per file (or a small explicit set). **Never** `git add .`, `git add -A`, or `git add -u` unless **every** dirty path in status is on the session file list.
+- Compare `git status` / `git diff --name-only` to the session list; **skip** anything not on the list.
+- If a session file has edits you did not make (e.g. mixed with another agent), stage only with **`git add -p`** on hunks from this session, or ask the user — do not commit other agents’ hunks.
+- If the session list is empty but the tree is dirty, tell the user which paths are dirty and ask what to include; do not commit everything by default.
+
+### After commit
+
+- Leftover unstaged changes from other sessions are expected; mention them briefly in the reply if they remain.
 
 ## Commit message format
 
@@ -49,7 +74,9 @@ feat(lexio-offline): redesign setup lobby
 ## Workflow
 
 1. Parallel: `git status`, `git diff`, `git log`
-2. Stage files; English subject + Korean bullet body (one body block, no blank lines between `-` items; on Windows use `-F` UTF-8 file if Korean breaks)
-3. Commit; `git status`
-4. Reply: Korean bullet summary (간단 말투)
-5. Hook failed → fix, **new** commit (no amend unless allowed)
+2. **Build session file list** (conversation + user scope); subtract anything that must not ship
+3. **Stage only** listed paths (`git add <path>`); never blanket-add the repo
+4. English subject + Korean bullet body (one body block, no blank lines between `-` items; on Windows use `-F` UTF-8 file if Korean breaks)
+5. Commit; `git status`
+6. Reply: Korean bullet summary (간단 말투); note unstaged files from other sessions if any
+7. Hook failed → fix, **new** commit (no amend unless allowed)
