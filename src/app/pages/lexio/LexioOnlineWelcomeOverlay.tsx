@@ -1,4 +1,5 @@
 import React from 'react';
+import LexioWelcomeAnimatedCard from './LexioWelcomeAnimatedCard';
 
 const PARTICLE_COUNT = 18;
 
@@ -35,26 +36,10 @@ export default function LexioOnlineWelcomeOverlay({
         ))}
       </div>
 
-      <div className="lexio-welcome-card">
-        <span className="lexio-welcome-card-ring" aria-hidden />
-        <span className="lexio-welcome-card-glow" aria-hidden />
-
-        <div className="lexio-welcome-inner">
-          <span className="lexio-welcome-line lexio-welcome-line-top" aria-hidden />
-          <p className="lexio-welcome-subtitle">Welcome to Lexio</p>
-          <h2 className="lexio-welcome-title">
-            <span className="lexio-welcome-title-text">
-              렉시오에 오신 걸 환영합니다
-            </span>
-          </h2>
-          <span
-            className="lexio-welcome-line lexio-welcome-line-bottom"
-            aria-hidden
-          />
-        </div>
-
-        <span className="lexio-welcome-shimmer" aria-hidden />
-      </div>
+      <LexioWelcomeAnimatedCard
+        subtitle="Welcome to Lexio"
+        title="렉시오에 오신 걸 환영합니다"
+      />
     </div>
   );
 }

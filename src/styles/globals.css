@@ -516,6 +516,627 @@
   pointer-events: none;
 }
 
+/* Lexio Offline — unified setup landing */
+@keyframes lexioOfflineSetupIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes lexioOfflineSetupShellIn {
+  from {
+    opacity: 0;
+    transform: translateY(28px) scale(0.97);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes lexioOfflineSetupOrb {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.4;
+  }
+  50% {
+    transform: translate(8px, -12px) scale(1.08);
+    opacity: 0.65;
+  }
+}
+
+@keyframes lexioOfflineSetupTitleShine {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+.lexio-offline-setup-page {
+  display: flex;
+  flex-direction: column;
+}
+
+@media (min-width: 1024px) {
+  .lexio-setup-topbar {
+    margin-bottom: 2rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .lexio-offline-setup-page {
+    justify-content: center;
+    min-height: calc(100dvh - 7rem);
+    padding-bottom: 2rem;
+  }
+}
+
+.lexio-offline-setup {
+  position: relative;
+  width: 100%;
+  max-width: 28rem;
+  margin-inline: auto;
+  padding: 0.5rem 0 2.5rem;
+  animation: lexioOfflineSetupIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (min-width: 768px) {
+  .lexio-offline-setup {
+    max-width: 40rem;
+    padding-bottom: 3rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .lexio-offline-setup {
+    max-width: none;
+    padding: 1rem 0 3.5rem;
+  }
+}
+
+.lexio-offline-setup-ambient {
+  position: absolute;
+  inset: -2rem -1rem 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.lexio-offline-setup-orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(48px);
+  animation: lexioOfflineSetupOrb 8s ease-in-out infinite;
+}
+
+.lexio-offline-setup-orb-a {
+  top: 0;
+  left: 10%;
+  width: 10rem;
+  height: 10rem;
+  background: rgba(124, 58, 237, 0.35);
+}
+
+.lexio-offline-setup-orb-b {
+  right: 5%;
+  bottom: 20%;
+  width: 8rem;
+  height: 8rem;
+  background: rgba(99, 102, 241, 0.28);
+  animation-delay: -3s;
+}
+
+@media (min-width: 1024px) {
+  .lexio-offline-setup-ambient {
+    inset: -3rem -2rem -1rem;
+  }
+
+  .lexio-offline-setup-orb-a {
+    width: 16rem;
+    height: 16rem;
+    left: 5%;
+  }
+
+  .lexio-offline-setup-orb-b {
+    width: 14rem;
+    height: 14rem;
+    right: 8%;
+  }
+}
+
+.lexio-offline-setup-shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.75rem 1.5rem 1.65rem;
+  border-radius: 1.5rem;
+  animation: lexioOfflineSetupShellIn 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
+  background:
+    radial-gradient(ellipse 90% 50% at 50% 0%, rgba(124, 58, 237, 0.22), transparent 55%),
+    linear-gradient(165deg, rgba(39, 34, 88, 0.92) 0%, rgba(14, 12, 42, 0.96) 48%, rgba(8, 8, 28, 0.98) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(196, 181, 253, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 28px 56px -28px rgba(0, 0, 0, 0.75),
+    0 0 60px -20px rgba(124, 58, 237, 0.35);
+}
+
+@media (min-width: 640px) {
+  .lexio-offline-setup-shell {
+    padding: 2rem 1.85rem 1.85rem;
+    gap: 1.65rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .lexio-offline-setup-shell {
+    gap: 2.25rem;
+    padding: 2.75rem 3rem 2.65rem;
+    border-radius: 1.75rem;
+  }
+}
+
+.lexio-offline-setup-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(216, 180, 254, 0.45),
+    rgba(124, 58, 237, 0.15) 40%,
+    rgba(129, 140, 248, 0.35) 70%,
+    rgba(216, 180, 254, 0.2)
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.lexio-offline-setup-hero {
+  text-align: center;
+}
+
+.lexio-offline-setup-hero-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.lexio-offline-setup-rules-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: none;
+  border-radius: 9999px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(233, 213, 255, 0.95);
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.35);
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.lexio-offline-setup-rules-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #faf5ff;
+  box-shadow: inset 0 0 0 1px rgba(196, 181, 253, 0.55);
+}
+
+.lexio-offline-setup-rules-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+  color: rgba(196, 181, 253, 0.9);
+}
+
+.lexio-offline-setup-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  text-align: left;
+  font-family: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+  font-size: clamp(1.85rem, 6vw, 2.35rem);
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  color: transparent;
+  background: linear-gradient(
+    105deg,
+    #faf5ff 0%,
+    #e9d5ff 25%,
+    #ffffff 48%,
+    #c4b5fd 72%,
+    #f5f3ff 100%
+  );
+  background-size: 220% auto;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: lexioOfflineSetupTitleShine 5s linear 1s infinite;
+}
+
+.lexio-offline-setup-lead {
+  margin: 0.85rem auto 0;
+  max-width: 22rem;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  color: rgba(216, 180, 254, 0.72);
+}
+
+.lexio-offline-setup-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+@media (min-width: 1024px) {
+  .lexio-offline-setup-hero {
+    text-align: left;
+  }
+
+  .lexio-offline-setup-hero-row {
+    justify-content: space-between;
+    gap: 1.25rem;
+    margin-bottom: 0.65rem;
+  }
+
+  .lexio-offline-setup-rules-btn {
+    padding: 0.55rem 1.2rem;
+    font-size: 0.85rem;
+  }
+
+  .lexio-offline-setup-rules-icon {
+    width: 1.05rem;
+    height: 1.05rem;
+  }
+
+  .lexio-offline-setup-title {
+    font-size: clamp(2.75rem, 4.2vw, 3.5rem);
+  }
+
+  .lexio-offline-setup-lead {
+    margin: 1.1rem 0 0;
+    max-width: none;
+    font-size: 1.125rem;
+    line-height: 1.5;
+    white-space: nowrap;
+  }
+
+  .lexio-offline-setup-body {
+    gap: 2rem;
+  }
+}
+
+.lexio-offline-setup-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lexio-offline-setup-stats--duo {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.lexio-offline-setup-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+@media (min-width: 1024px) {
+  .lexio-offline-setup-settings {
+    gap: 1rem;
+  }
+}
+
+.lexio-offline-setup-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.75rem 0.35rem;
+  border-radius: 0.85rem;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.2);
+}
+
+.lexio-offline-setup-stat-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+@media (min-width: 768px) {
+  .lexio-offline-setup-stats {
+    gap: 0.75rem;
+  }
+
+  .lexio-offline-setup-stat {
+    padding: 1rem 0.75rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .lexio-offline-setup-stats {
+    gap: 1rem;
+  }
+
+  .lexio-offline-setup-stat {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 1rem;
+    padding: 1.15rem 1.35rem;
+    border-radius: 1rem;
+  }
+
+  .lexio-offline-setup-stat-copy {
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+}
+
+.lexio-offline-setup-stat-icon {
+  flex-shrink: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  color: rgba(196, 181, 253, 0.9);
+}
+
+@media (min-width: 1024px) {
+  .lexio-offline-setup-stat-icon {
+    width: 1.5rem;
+    height: 1.5rem;
+  }
+}
+
+.lexio-offline-setup-stat-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(196, 181, 253, 0.75);
+}
+
+.lexio-offline-setup-stat-value {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: rgba(245, 243, 255, 0.95);
+  text-align: center;
+  line-height: 1.25;
+}
+
+@media (min-width: 1024px) {
+  .lexio-offline-setup-stat-label {
+    font-size: 0.78rem;
+  }
+
+  .lexio-offline-setup-stat-value {
+    font-size: 1.05rem;
+    text-align: left;
+  }
+}
+
+.lexio-offline-setup-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+@media (min-width: 1024px) {
+  .lexio-offline-setup-controls {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    gap: 1.5rem 2rem;
+  }
+
+  .lexio-offline-setup-settings {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem 1.25rem;
+  }
+}
+
+.lexio-offline-setup-rounds {
+  padding: 1rem 1.1rem;
+  border-radius: 1rem;
+  background: rgba(0, 0, 0, 0.22);
+  box-shadow: inset 0 0 0 1px rgba(168, 85, 247, 0.18);
+}
+
+.lexio-offline-setup-rounds-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.lexio-offline-setup-rounds-head label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: rgba(233, 213, 255, 0.9);
+}
+
+.lexio-offline-setup-rounds-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #f5f3ff;
+}
+
+.lexio-offline-setup-rounds-max {
+  margin-left: 0.15rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: rgba(196, 181, 253, 0.55);
+}
+
+.lexio-offline-setup-slider {
+  display: block;
+  width: 100%;
+  height: 0.35rem;
+  appearance: none;
+  border-radius: 9999px;
+  background: rgba(88, 28, 135, 0.45);
+  cursor: pointer;
+}
+
+.lexio-offline-setup-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 9999px;
+  background: linear-gradient(145deg, #e9d5ff, #a855f7);
+  box-shadow:
+    0 0 0 2px rgba(10, 10, 35, 0.9),
+    0 4px 14px rgba(168, 85, 247, 0.55);
+}
+
+.lexio-offline-setup-slider::-moz-range-thumb {
+  width: 1.15rem;
+  height: 1.15rem;
+  border: none;
+  border-radius: 9999px;
+  background: linear-gradient(145deg, #e9d5ff, #a855f7);
+  box-shadow:
+    0 0 0 2px rgba(10, 10, 35, 0.9),
+    0 4px 14px rgba(168, 85, 247, 0.55);
+}
+
+.lexio-offline-setup-rounds-hint {
+  margin: 0.65rem 0 0;
+  font-size: 0.7rem;
+  line-height: 1.55;
+  color: rgba(167, 139, 250, 0.65);
+}
+
+@media (min-width: 1024px) {
+  .lexio-offline-setup-rounds {
+    padding: 1.35rem 1.65rem;
+    border-radius: 1.1rem;
+  }
+
+  .lexio-offline-setup-rounds-head label {
+    font-size: 1rem;
+  }
+
+  .lexio-offline-setup-rounds-value {
+    font-size: 1.65rem;
+  }
+
+  .lexio-offline-setup-rounds-max {
+    font-size: 0.95rem;
+  }
+
+  .lexio-offline-setup-rounds-hint {
+    font-size: 0.9rem;
+  }
+
+  .lexio-offline-setup-slider {
+    height: 0.45rem;
+  }
+
+  .lexio-offline-setup-slider::-webkit-slider-thumb {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+
+  .lexio-offline-setup-slider::-moz-range-thumb {
+    width: 1.35rem;
+    height: 1.35rem;
+  }
+}
+
+.lexio-offline-setup-cta {
+  width: 100%;
+  border: none;
+  border-radius: 9999px;
+  padding: 0.95rem 1.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.38em;
+  text-indent: 0.38em;
+  text-transform: uppercase;
+  color: #faf5ff;
+  cursor: pointer;
+  background: linear-gradient(
+    180deg,
+    rgba(192, 132, 252, 0.55) 0%,
+    rgba(126, 34, 206, 0.75) 45%,
+    rgba(76, 29, 149, 0.92) 100%
+  );
+  box-shadow:
+    inset 0 0 0 1px rgba(216, 180, 254, 0.55),
+    0 14px 36px -12px rgba(168, 85, 247, 0.55);
+  transition:
+    transform 0.2s ease,
+    filter 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.lexio-offline-setup-cta:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
+  box-shadow:
+    inset 0 0 0 1px rgba(233, 213, 255, 0.65),
+    0 18px 40px -10px rgba(168, 85, 247, 0.65);
+}
+
+.lexio-offline-setup-cta:active {
+  transform: translateY(0);
+}
+
+@media (min-width: 1024px) {
+  .lexio-offline-setup-cta {
+    width: auto;
+    min-width: 13rem;
+    padding: 1.15rem 2.85rem;
+    font-size: 0.85rem;
+    letter-spacing: 0.32em;
+    text-indent: 0.32em;
+    justify-self: end;
+  }
+}
+
+.lexio-welcome-title--solo {
+  margin-top: 0;
+}
+
 .lexio-rules-panel {
   position: relative;
 }

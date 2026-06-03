@@ -5,6 +5,25 @@ import LexioHomeCard from '../components/LexioHomeCard';
 
 const games = [
   {
+    id: 'lexio',
+    title: '렉시오',
+    description: 'AI 오프라인 또는 친구와 온라인 멀티플레이',
+    icon: Layers,
+    path: '/lexio',
+    color: 'from-purple-600 to-indigo-700',
+    image: 'https://images.unsplash.com/photo-1606503153255-59d8b8b82176?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+    splitMode: true as const,
+  },
+  {
+    id: 'holdem',
+    title: '텍사스 홀덤',
+    description: 'AI와 함께하는 포커 게임',
+    icon: Spade,
+    path: '/holdem',
+    color: 'from-amber-600 to-amber-800',
+    image: 'https://images.unsplash.com/photo-1541278107931-e006523892df?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwb2tlciUyMGNhcmRzfGVufDF8fHx8MTc0NjYzMDAwMHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
+  },
+  {
     id: '2048',
     title: '2048',
     description: '숫자 타일을 합쳐 2048을 만드세요',
@@ -21,25 +40,6 @@ const games = [
     path: '/snake',
     color: 'from-green-500 to-emerald-500',
     image: 'https://images.unsplash.com/photo-1567027757540-7b572280fa22?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxnYW1pbmclMjBjb250cm9sbGVyJTIwbmVvbnxlbnwxfHx8fDE3NzE4ODMxOTl8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-  },
-  {
-    id: 'holdem',
-    title: '텍사스 홀덤',
-    description: 'AI와 함께하는 포커 게임',
-    icon: Spade,
-    path: '/holdem',
-    color: 'from-amber-600 to-amber-800',
-    image: 'https://images.unsplash.com/photo-1541278107931-e006523892df?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwb2tlciUyMGNhcmRzfGVufDF8fHx8MTc0NjYzMDAwMHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
-  },
-  {
-    id: 'lexio',
-    title: '렉시오',
-    description: 'AI 오프라인 또는 친구와 온라인 멀티플레이',
-    icon: Layers,
-    path: '/lexio',
-    color: 'from-purple-600 to-indigo-700',
-    image: 'https://images.unsplash.com/photo-1606503153255-59d8b8b82176?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-    splitMode: true as const,
   },
 ];
 

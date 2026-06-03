@@ -22,7 +22,8 @@ import {
   LexioPlayer,
   LexioCombination,
   COLOR_HEX,
-  createDeck,
+  createDeckForPlayerCount,
+  lexioHandSizeForPlayerCount,
   shuffle,
   sortHand,
   detectCombo,
@@ -33,6 +34,7 @@ import {
   roundCoinForHand,
 } from '../utils/lexio';
 import LexioFirstPersonScene from './lexio/LexioFirstPersonScene';
+import LexioOfflineSetup from './lexio/LexioOfflineSetup';
 import {
   LexioPlayCard,
   lexioColorToSuit,
@@ -77,8 +79,8 @@ type PersistedLexioState = {
   lastRoundCoinDouble?: boolean;
 };
 
-const NUM_PLAYERS = 5;
-const HAND_SIZE = 12;
+const MIN_OFFLINE_AI = 2;
+const MAX_OFFLINE_AI = 4;
 const LEXIO_STORAGE_KEY = 'lexio-state-v3';
 const MAX_SESSION_ROUNDS = 20;
 
@@ -100,9 +102,11 @@ function nextTurnPlayerIndex(
   playersList: LexioPlayer[],
 ): number {
   const n = playersList.length;
-  const start = PLAYER_TURN_ORDER.indexOf(
-    currentIdx as (typeof PLAYER_TURN_ORDER)[number],
-  );
+  const order =
+    n === 5
+      ? PLAYER_TURN_ORDER
+      : Array.from({ length: n }, (_, i) => i);
+  const start = order.indexOf(currentIdx);
   if (start === -1) {
     let nxt = (currentIdx + 1) % n;
     let safety = 0;
@@ -113,8 +117,7 @@ function nextTurnPlayerIndex(
     return nxt;
   }
   for (let step = 1; step <= n; step++) {
-    const idx =
-      PLAYER_TURN_ORDER[(start + step) % PLAYER_TURN_ORDER.length];
+    const idx = order[(start + step) % order.length];
     if (playersList[idx].hand.length > 0) return idx;
   }
   return currentIdx;
@@ -240,10 +243,12 @@ function makePlayers(numAI: number): UiPlayer[] {
 }
 
 function dealHands(players: UiPlayer[]): UiPlayer[] {
-  const deck = shuffle(createDeck());
+  const playerCount = players.length;
+  const deck = shuffle(createDeckForPlayerCount(playerCount));
+  const handSize = lexioHandSizeForPlayerCount(playerCount);
   return players.map((p, idx) => ({
     ...p,
-    hand: sortHand(deck.slice(idx * HAND_SIZE, (idx + 1) * HAND_SIZE)),
+    hand: sortHand(deck.slice(idx * handSize, (idx + 1) * handSize)),
     passed: false,
   }));
 }
@@ -272,6 +277,8 @@ export default function Lexio() {
   const [hasHydrated, setHasHydrated] = useState(false);
   const discardSeqRef = useRef(0);
   const [pendingSessionRounds, setPendingSessionRounds] = useState(5);
+  const [pendingAiCount, setPendingAiCount] = useState(MAX_OFFLINE_AI);
+  const [offlineAiCount, setOfflineAiCount] = useState(MAX_OFFLINE_AI);
   const [sessionTotalRounds, setSessionTotalRounds] = useState(5);
   const [sessionCompletedRounds, setSessionCompletedRounds] = useState(0);
   const [sessionCoinsByPlayerId, setSessionCoinsByPlayerId] = useState<
@@ -313,7 +320,7 @@ export default function Lexio() {
   /** 새 판만 시작 (세션 코인·완료 판 수는 유지) */
   const dealNewHand = useCallback(() => {
     setLastRoundCoinRows([]);
-    const dealt = dealHands(makePlayers(NUM_PLAYERS - 1));
+    const dealt = dealHands(makePlayers(offlineAiCount));
     const starter = findStarterIndex(dealt);
     setPlayers(dealt);
     setCurrentPlay(null);
@@ -325,7 +332,7 @@ export default function Lexio() {
     setLastPlayedByIdx(null);
     setDiscardPlacements([]);
     setMessage('');
-  }, []);
+  }, [offlineAiCount]);
 
   /** 첫 화면에서 판 수 정한 뒤 세션 시작 */
   const beginNewSessionFromSetup = useCallback(() => {
@@ -333,11 +340,16 @@ export default function Lexio() {
       MAX_SESSION_ROUNDS,
       Math.max(1, Math.floor(pendingSessionRounds)),
     );
+    const aiCount = Math.min(
+      MAX_OFFLINE_AI,
+      Math.max(MIN_OFFLINE_AI, Math.floor(pendingAiCount)),
+    );
+    setOfflineAiCount(aiCount);
     setSessionTotalRounds(rounds);
     setSessionCompletedRounds(0);
     setSessionCoinsByPlayerId({});
     setLastRoundCoinRows([]);
-    const dealt = dealHands(makePlayers(NUM_PLAYERS - 1));
+    const dealt = dealHands(makePlayers(aiCount));
     const starter = findStarterIndex(dealt);
     setPlayers(dealt);
     setCurrentPlay(null);
@@ -349,7 +361,7 @@ export default function Lexio() {
     setLastPlayedByIdx(null);
     setDiscardPlacements([]);
     setMessage('');
-  }, [pendingSessionRounds]);
+  }, [pendingSessionRounds, pendingAiCount]);
 
   const resetSessionToSetup = useCallback(() => {
     setPlayers([]);
@@ -754,6 +766,16 @@ export default function Lexio() {
     setLexioMenuOpen(true);
   }, []);
 
+  const openLexioRules = useCallback(() => {
+    if (lexioMenuCloseTimerRef.current) {
+      clearTimeout(lexioMenuCloseTimerRef.current);
+      lexioMenuCloseTimerRef.current = null;
+    }
+    setLexioMenuClosing(false);
+    setLexioModalView('rules');
+    setLexioMenuOpen(true);
+  }, []);
+
   useEffect(
     () => () => {
       if (lexioMenuCloseTimerRef.current) {
@@ -819,9 +841,19 @@ export default function Lexio() {
                 {lexioModalView !== 'home' && (
                   <button
                     type="button"
-                    onClick={() => setLexioModalView('home')}
+                    onClick={() => {
+                      if (phase === 'setup' && lexioModalView === 'rules') {
+                        closeLexioMenu();
+                      } else {
+                        setLexioModalView('home');
+                      }
+                    }}
                     className="shrink-0 rounded-full p-1.5 text-slate-300/80 transition-colors hover:bg-white/[0.08] hover:text-purple-200"
-                    aria-label="옵션으로 돌아가기"
+                    aria-label={
+                      phase === 'setup' && lexioModalView === 'rules'
+                        ? '닫기'
+                        : '옵션으로 돌아가기'
+                    }
                   >
                     <ChevronLeft className="h-5 w-5" />
                   </button>
@@ -1275,120 +1307,101 @@ export default function Lexio() {
         </div>
       )}
 
-      <div className={isTableView ? '' : 'max-w-7xl mx-auto'}>
-        {/* Header — 테이블 뷰에서는 캔버스 위 오버레이 */}
-        <div
-          className={`flex items-center justify-between pointer-events-auto ${
-            isTableView
-              ? 'fixed top-0 left-0 right-0 z-20 px-4 py-3 bg-gradient-to-b from-[#0a0a23]/95 to-transparent'
-              : 'mb-4'
-          }`}
-        >
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 rounded-full bg-white/[0.05] px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.4)] transition-colors duration-200 hover:bg-white/[0.12] hover:text-white hover:shadow-[inset_0_0_0_1px_rgba(168,85,247,0.7)]"
+      <div
+        className={
+          isTableView
+            ? ''
+            : phase === 'setup'
+              ? 'lexio-offline-setup-page mx-auto w-full max-w-6xl px-4 sm:px-6 lg:max-w-7xl lg:px-8'
+              : 'mx-auto max-w-7xl'
+        }
+      >
+        {/* Header — setup은 미니 바, 테이블 뷰는 캔버스 오버레이 */}
+        {phase === 'setup' && !isTableView ? (
+          <header className="lexio-setup-topbar pointer-events-auto mb-6 flex items-center justify-between">
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 rounded-full border border-purple-500/30 bg-white/5 px-4 py-2.5 text-sm font-semibold uppercase tracking-widest text-purple-100 hover:bg-white/10"
+            >
+              <Home className="h-4 w-4" />
+              홈
+            </Link>
+            <div className="text-center">
+              <p className="text-base uppercase tracking-[0.45em] text-purple-300/70 sm:text-lg">
+                렉시오 오프라인
+              </p>
+              <h1 className="font-serif text-4xl tracking-wider text-purple-100 sm:text-5xl">
+                Lexio Offline
+              </h1>
+            </div>
+            <div className="w-[5.5rem] shrink-0" aria-hidden />
+          </header>
+        ) : (
+          <div
+            className={`flex items-center justify-between pointer-events-auto ${
+              isTableView
+                ? 'fixed top-0 left-0 right-0 z-20 px-4 py-3 bg-gradient-to-b from-[#0a0a23]/95 to-transparent'
+                : 'mb-4'
+            }`}
           >
-            <Home className="w-4 h-4" />
-            홈
-          </Link>
-          <div className="text-center">
-            <p className="text-[10px] tracking-[0.5em] text-purple-300/70 uppercase">
-              렉시오
-            </p>
-            <h1 className="text-2xl sm:text-3xl font-serif tracking-wider text-purple-100">
-              Lexio
-            </h1>
-            {isTableView && (
-              <p className="mt-1 text-[11px] tracking-wide text-purple-200/80">
-                코인 {humanSessionCoins} · {sessionCompletedRounds}/
-                {sessionTotalRounds}판
-              </p>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={openLexioOptions}
-              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-b from-purple-500/35 to-violet-800/45 px-3 py-2 text-xs font-semibold tracking-[0.25em] text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.55),0_8px_20px_-10px_rgba(168,85,247,0.45)] transition-colors duration-200 hover:from-purple-400/45 hover:to-violet-700/55 hover:text-white sm:px-4"
-              aria-label="옵션"
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 rounded-full bg-white/[0.05] px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.4)] transition-colors duration-200 hover:bg-white/[0.12] hover:text-white hover:shadow-[inset_0_0_0_1px_rgba(168,85,247,0.7)]"
             >
-              <Settings className="h-4 w-4 shrink-0 sm:h-[18px] sm:w-[18px]" />
-              <span className="hidden sm:inline">옵션</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Setup Phase */}
-        {phase === 'setup' && (
-          <div className="flex flex-col items-center justify-center py-24">
-            <div
-              className="rounded-2xl p-10 max-w-md w-full text-center"
-              style={{
-                background:
-                  'linear-gradient(180deg, rgba(30,27,75,0.7) 0%, rgba(10,10,35,0.85) 100%)',
-                boxShadow:
-                  'inset 0 0 0 1px rgba(168,85,247,0.4), 0 30px 60px -20px rgba(0,0,0,0.7)',
-              }}
-            >
-              <p className="text-[10px] tracking-[0.5em] text-purple-300/80 uppercase mb-3">
-                환영합니다
+              <Home className="w-4 h-4" />
+              홈
+            </Link>
+            <div className="text-center">
+              <p
+                className={`uppercase text-purple-300/70 ${
+                  isTableView
+                    ? 'text-[10px] tracking-[0.5em]'
+                    : 'text-sm tracking-[0.4em] sm:text-base sm:tracking-[0.45em]'
+                }`}
+              >
+                {isTableView ? '렉시오' : '렉시오 오프라인'}
               </p>
-              <h2 className="text-2xl font-serif tracking-wide text-purple-100 mb-3">
-                Welcome to Lexio
-              </h2>
-              <p className="text-purple-100/70 text-sm mb-6 leading-relaxed">
-                렉시오는 3인~5인까지 즐길 수 있는 한국식 셰딩 게임입니다.
-                <br />
-                이 화면에서는 4명의 AI와 함께하는 <strong>5인</strong> 모드로,
-                전체 60장 중 각자 12장을 받아 가장 먼저 손패를 비우면 승리합니다.
-                <br />
-                <span className="text-purple-300/90">
-                  플레이 중에는 3D 테이블 1인칭 시점으로 진행됩니다.
-                </span>
-              </p>
-              <div className="mb-8 text-left">
-                <label
-                  htmlFor="lexio-session-rounds"
-                  className="mb-2 block text-xs font-medium tracking-wide text-purple-200/90"
-                >
-                  이번 세션 총 판 수 (최대 {MAX_SESSION_ROUNDS}판)
-                </label>
-                <div className="flex items-center gap-4">
-                  <input
-                    id="lexio-session-rounds"
-                    type="range"
-                    min={1}
-                    max={MAX_SESSION_ROUNDS}
-                    value={pendingSessionRounds}
-                    onChange={(e) =>
-                      setPendingSessionRounds(Number(e.target.value))
-                    }
-                    className="min-w-0 flex-1 accent-purple-400"
-                  />
-                  <span className="w-10 shrink-0 text-right font-mono text-sm text-purple-100">
-                    {pendingSessionRounds}
-                  </span>
-                </div>
-                <p className="mt-2 text-[11px] leading-relaxed text-purple-300/70">
-                  한 판이 끝날 때마다 남은 패 수만큼 모든 플레이어가 코인을
-                  얻습니다. 손에 숫자 2가 있으면 그 판 코인이 2배입니다.
+              <h1
+                className={`font-serif tracking-wider text-purple-100 ${
+                  isTableView ? 'text-2xl sm:text-3xl' : 'text-3xl sm:text-4xl'
+                }`}
+              >
+                {isTableView ? 'Lexio' : 'Lexio Offline'}
+              </h1>
+              {isTableView && (
+                <p className="mt-1 text-[11px] tracking-wide text-purple-200/80">
+                  코인 {humanSessionCoins} · {sessionCompletedRounds}/
+                  {sessionTotalRounds}판
                 </p>
-              </div>
+              )}
+            </div>
+            <div className="flex gap-2">
               <button
                 type="button"
-                onClick={beginNewSessionFromSetup}
-                className="rounded-full px-8 py-3 text-xs tracking-[0.4em] uppercase font-bold text-purple-100 transition-all hover:-translate-y-0.5"
-                style={{
-                  background:
-                    'linear-gradient(180deg, rgba(168,85,247,0.5) 0%, rgba(91,33,182,0.6) 100%)',
-                  boxShadow:
-                    'inset 0 0 0 1px rgba(168,85,247,0.8), 0 10px 30px -8px rgba(168,85,247,0.6)',
-                }}
+                onClick={openLexioOptions}
+                className="inline-flex items-center gap-2 rounded-full bg-gradient-to-b from-purple-500/35 to-violet-800/45 px-3 py-2 text-xs font-semibold tracking-[0.25em] text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.55),0_8px_20px_-10px_rgba(168,85,247,0.45)] transition-colors duration-200 hover:from-purple-400/45 hover:to-violet-700/55 hover:text-white sm:px-4"
+                aria-label="옵션"
               >
-                게임 시작
+                <Settings className="h-4 w-4 shrink-0 sm:h-[18px] sm:w-[18px]" />
+                <span className="hidden sm:inline">옵션</span>
               </button>
             </div>
           </div>
+        )}
+
+        {/* Setup Phase */}
+        {phase === 'setup' && (
+          <LexioOfflineSetup
+            pendingSessionRounds={pendingSessionRounds}
+            maxSessionRounds={MAX_SESSION_ROUNDS}
+            onSessionRoundsChange={setPendingSessionRounds}
+            pendingAiCount={pendingAiCount}
+            minAiCount={MIN_OFFLINE_AI}
+            maxAiCount={MAX_OFFLINE_AI}
+            onAiCountChange={setPendingAiCount}
+            onStart={beginNewSessionFromSetup}
+            onOpenRules={openLexioRules}
+          />
         )}
 
         {/* Playing / Finished — 전체 화면 3D 1인칭 테이블 */}
