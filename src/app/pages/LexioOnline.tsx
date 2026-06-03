@@ -11,22 +11,24 @@ import {
   Copy,
   Check,
   Users,
-  Wifi,
-  WifiOff,
   Play,
   Loader2,
   Link2,
   Crown,
 } from 'lucide-react';
 import {
-  LexioPlayCard,
-  lexioColorToSuit,
-} from '../components/lexio/LexioPlayCard';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../components/ui/select';
+import LexioFirstPersonScene from './lexio/LexioFirstPersonScene';
+import { beats, comboKorean, detectCombo } from '../utils/lexio';
 import {
-  beats,
-  comboKorean,
-  detectCombo,
-} from '../utils/lexio';
+  buildOnlineFinishTableUi,
+  clientViewToPlayers,
+} from '../utils/lexioOnlineScene';
 import {
   applyPass,
   applyPlay,
@@ -80,7 +82,8 @@ export default function LexioOnline() {
   });
   const [gameView, setGameView] = useState<ClientGameView | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
-  const [copied, setCopied] = useState(false);
+  const [copiedInvite, setCopiedInvite] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   const hostRef = useRef<LexioHostRoom | null>(null);
   const guestRef = useRef<LexioGuestRoom | null>(null);
@@ -98,6 +101,9 @@ export default function LexioOnline() {
       const view = buildClientView(state, p.peerId);
       if (view) host.sendTo(p.peerId, { type: 'game', view });
     }
+    // 호스트는 P2P 연결 맵에 없어 sendTo로 자신에게 전달되지 않음 → 로컬 state 동기화
+    const hostView = buildClientView(state, myPeerIdRef.current);
+    if (hostView) setGameView(hostView);
   }, []);
 
   const handleHostMessage = useCallback(
@@ -322,11 +328,19 @@ export default function LexioOnline() {
         passed: false,
       })),
     };
-    state = startNewRound(state);
+    try {
+      state = startNewRound(state);
+    } catch (err) {
+      setStatusMessage(
+        err instanceof Error ? err.message : '패 분배에 실패했습니다.',
+      );
+      return;
+    }
     gameStateRef.current = state;
     hostRef.current?.broadcast({ type: 'start' });
     broadcastGame(state);
     setScreen('game');
+    setStatusMessage('');
     const hostView = buildClientView(state, myPeerIdRef.current);
     if (hostView) setGameView(hostView);
   };
@@ -391,10 +405,22 @@ export default function LexioOnline() {
   const copyInvite = async () => {
     try {
       await navigator.clipboard.writeText(inviteUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopiedInvite(true);
+      setTimeout(() => setCopiedInvite(false), 2000);
     } catch {
       setStatusMessage('링크 복사에 실패했습니다.');
+    }
+  };
+
+  const copyRoomCode = async () => {
+    const code = displayRoomCode(roomId);
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    } catch {
+      setStatusMessage('방 코드 복사에 실패했습니다.');
     }
   };
 
@@ -424,48 +450,110 @@ export default function LexioOnline() {
     gameView.phase === 'finished' &&
     gameView.sessionCompletedRounds < gameView.sessionTotalRounds;
 
+  const isTableView = screen === 'game';
+
+  const sceneBundle = useMemo(() => {
+    if (!gameView) return null;
+    const { players, humanPlayer } = clientViewToPlayers(gameView);
+    return {
+      players,
+      humanPlayer,
+      finishTableUi: buildOnlineFinishTableUi(
+        gameView,
+        isHost,
+        hostNextRound,
+        leaveRoom,
+      ),
+      sessionCoinsByPlayerId: gameView.sessionCoinsBySeat,
+    };
+  }, [gameView, isHost, hostNextRound, leaveRoom]);
+
+  useEffect(() => {
+    if (!isTableView || !gameView || gameView.phase !== 'finished') return;
+    if (!isHost || !sessionHasNext) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        hostNextRound();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isTableView, gameView, isHost, sessionHasNext, hostNextRound]);
+
+  const toggleSelect = (tileId: number) => {
+    setSelectedIds((prev) =>
+      prev.includes(tileId)
+        ? prev.filter((id) => id !== tileId)
+        : [...prev, tileId],
+    );
+  };
+
   return (
     <div
-      className="min-h-screen text-slate-100 p-4"
-      style={{
-        background:
-          'radial-gradient(ellipse at top, #2e1065 0%, #1e1b4b 45%, #0a0a23 100%)',
-      }}
+      className={`min-h-screen text-slate-100 ${isTableView ? 'p-0' : 'p-5 sm:p-6'}`}
+      style={
+        isTableView
+          ? { background: '#0a0a23' }
+          : {
+              background:
+                'radial-gradient(ellipse at top, #2e1065 0%, #1e1b4b 45%, #0a0a23 100%)',
+            }
+      }
     >
-      <div className="max-w-4xl mx-auto">
-        <header className="flex items-center justify-between mb-6">
+      <div className={isTableView ? '' : 'max-w-4xl mx-auto'}>
+        <header
+          className={`flex items-center justify-between ${
+            isTableView
+              ? 'fixed top-0 left-0 right-0 z-20 px-4 py-3 bg-gradient-to-b from-[#0a0a23]/95 to-transparent pointer-events-auto'
+              : 'mb-6'
+          }`}
+        >
           <Link
             to="/"
-            className="inline-flex items-center gap-2 rounded-full bg-white/5 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-purple-100 border border-purple-500/30 hover:bg-white/10"
+            className="inline-flex items-center gap-2 rounded-full bg-white/5 px-4 py-2.5 text-sm font-semibold uppercase tracking-widest text-purple-100 border border-purple-500/30 hover:bg-white/10"
           >
             <Home className="w-4 h-4" />
             홈
           </Link>
           <div className="text-center">
-            <p className="text-[10px] tracking-[0.5em] text-purple-300/70 uppercase">
-              Online
-            </p>
-            <h1 className="text-2xl font-serif tracking-wider text-purple-100">
+            <p
+              className={`uppercase text-purple-300/70 ${
+                isTableView
+                  ? 'text-sm tracking-[0.4em]'
+                  : 'text-base tracking-[0.45em] sm:text-lg'
+              }`}
+            >
               렉시오 온라인
+            </p>
+            <h1
+              className={`font-serif tracking-wider text-purple-100 ${
+                isTableView ? 'text-3xl' : 'text-4xl sm:text-5xl'
+              }`}
+            >
+              Lexio Online
             </h1>
+            {isTableView && gameView && (
+              <p className="mt-1 text-sm tracking-wide text-purple-200/80">
+                {displayRoomCode(roomId)} · 코인{' '}
+                {gameView.sessionCoinsBySeat[gameView.yourSeat] ?? 0} ·{' '}
+                {gameView.sessionCompletedRounds}/{gameView.sessionTotalRounds}
+                판
+              </p>
+            )}
           </div>
-          <Link
-            to="/lexio"
-            className="text-xs text-purple-300/80 hover:text-purple-100"
-          >
-            AI 대전
-          </Link>
+          <div className="w-[5.5rem] shrink-0" aria-hidden />
         </header>
 
         {connectionStatus === 'connecting' && (
-          <div className="flex items-center justify-center gap-2 py-8 text-purple-200">
-            <Loader2 className="w-5 h-5 animate-spin" />
+          <div className="flex items-center justify-center gap-2 py-8 text-base text-purple-200">
+            <Loader2 className="w-6 h-6 animate-spin" />
             연결 중…
           </div>
         )}
 
-        {statusMessage && (
-          <p className="mb-4 text-center text-sm text-rose-200/90 bg-rose-950/40 rounded-lg py-2 px-4 border border-rose-500/30">
+        {statusMessage && !isTableView && (
+          <p className="mb-4 text-center text-base text-rose-200/90 bg-rose-950/40 rounded-lg py-2.5 px-4 border border-rose-500/30">
             {statusMessage}
           </p>
         )}
@@ -479,28 +567,28 @@ export default function LexioOnline() {
                   'linear-gradient(180deg, rgba(30,27,75,0.8) 0%, rgba(10,10,35,0.9) 100%)',
               }}
             >
-              <h2 className="text-lg font-semibold text-purple-100 mb-4 flex items-center gap-2">
-                <Crown className="w-5 h-5 text-amber-400" />
+              <h2 className="text-xl font-semibold text-purple-100 mb-4 flex items-center gap-2">
+                <Crown className="w-6 h-6 text-amber-400" />
                 방 만들기
               </h2>
-              <label className="block text-xs text-purple-200/80 mb-1">
+              <label className="block text-sm text-purple-200/80 mb-1">
                 닉네임
               </label>
               <input
                 value={nickname}
                 onChange={(e) => setNickname(e.target.value)}
                 maxLength={16}
-                className="w-full mb-4 rounded-lg bg-black/30 border border-purple-500/40 px-3 py-2 text-sm"
+                className="w-full mb-4 rounded-lg bg-black/30 border border-purple-500/40 px-3 py-2.5 text-base"
                 placeholder="닉네임"
               />
               <button
                 type="button"
                 onClick={createRoom}
-                className="w-full rounded-full py-3 text-sm font-bold tracking-widest uppercase text-purple-100 bg-gradient-to-b from-purple-500/50 to-violet-800/60 border border-purple-400/50 hover:brightness-110"
+                className="w-full rounded-full py-3.5 text-base font-bold tracking-widest uppercase text-purple-100 bg-gradient-to-b from-purple-500/50 to-violet-800/60 border border-purple-400/50 hover:brightness-110"
               >
                 새 방 만들기
               </button>
-              <p className="mt-3 text-xs text-purple-300/60 leading-relaxed">
+              <p className="mt-3 text-sm text-purple-300/60 leading-relaxed">
                 로그인 없이 PeerJS(P2P)로 친구와 연결합니다. 호스트가 게임을
                 진행합니다.
               </p>
@@ -513,21 +601,21 @@ export default function LexioOnline() {
                   'linear-gradient(180deg, rgba(30,27,75,0.8) 0%, rgba(10,10,35,0.9) 100%)',
               }}
             >
-              <h2 className="text-lg font-semibold text-purple-100 mb-4 flex items-center gap-2">
-                <Link2 className="w-5 h-5 text-sky-400" />
+              <h2 className="text-xl font-semibold text-purple-100 mb-4 flex items-center gap-2">
+                <Link2 className="w-6 h-6 text-sky-400" />
                 방 참가
               </h2>
-              <label className="block text-xs text-purple-200/80 mb-1">
+              <label className="block text-sm text-purple-200/80 mb-1">
                 방 코드 (6자) — URL 붙여넣기 가능
               </label>
               <input
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value)}
                 maxLength={200}
-                className="w-full mb-2 rounded-lg bg-black/30 border border-purple-500/40 px-3 py-2 text-sm font-mono tracking-widest uppercase"
+                className="w-full mb-2 rounded-lg bg-black/30 border border-purple-500/40 px-3 py-2.5 text-base font-mono tracking-widest uppercase"
                 placeholder="예: ABC234"
               />
-              <p className="mb-4 text-[11px] leading-relaxed text-purple-300/60">
+              <p className="mb-4 text-sm leading-relaxed text-purple-300/60">
                 초대 링크는 브라우저 주소창에 붙여넣어 열거나, 여기에는{' '}
                 <strong className="text-purple-200/80">6자리 코드만</strong>{' '}
                 입력하세요. http://localhost… 전체는 넣지 마세요.
@@ -536,7 +624,7 @@ export default function LexioOnline() {
                 type="button"
                 onClick={() => joinRoom()}
                 disabled={!parseRoomCodeInput(joinCode)}
-                className="w-full rounded-full py-3 text-sm font-bold tracking-widest uppercase text-purple-100 bg-white/10 border border-white/20 hover:bg-white/15 disabled:opacity-40"
+                className="w-full rounded-full py-3.5 text-base font-bold tracking-widest uppercase text-purple-100 bg-white/10 border border-white/20 hover:bg-white/15 disabled:opacity-40"
               >
                 참가하기
               </button>
@@ -552,73 +640,94 @@ export default function LexioOnline() {
                 'linear-gradient(180deg, rgba(30,27,75,0.85) 0%, rgba(10,10,35,0.95) 100%)',
             }}
           >
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-              <div>
-                <p className="text-xs text-purple-300/70 uppercase tracking-widest">
-                  방 코드
-                </p>
-                <p className="text-3xl font-mono font-bold text-purple-100 tracking-[0.35em]">
-                  {displayRoomCode(roomId)}
-                </p>
+            {roomId && (
+              <div className="mb-6">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm uppercase tracking-widest text-purple-300/70">
+                    방 코드
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Users
+                      className={`w-5 h-5 ${
+                        connectionStatus === 'connected'
+                          ? 'text-purple-300'
+                          : 'text-rose-400/90'
+                      }`}
+                    />
+                    <span className="text-base text-purple-200/80">
+                      {lobbyPlayers.length}/{lobbySettings.maxPlayers}명
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-stretch overflow-hidden rounded-lg border border-purple-500/40 bg-black/30">
+                  <p className="min-w-0 flex-1 px-3 py-3 font-mono text-3xl font-bold tracking-[0.35em] text-purple-100 select-all sm:text-4xl">
+                    {displayRoomCode(roomId)}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={copyRoomCode}
+                    aria-label="방 코드 복사"
+                    className="group/copy-code flex shrink-0 items-center justify-center self-center px-3 text-purple-200"
+                  >
+                    {copiedCode ? (
+                      <Check className="h-5 w-5 text-emerald-400 transition-opacity group-hover/copy-code:opacity-70" />
+                    ) : (
+                      <Copy className="h-5 w-5 transition-opacity group-hover/copy-code:opacity-60" />
+                    )}
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                {connectionStatus === 'connected' ? (
-                  <Wifi className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <WifiOff className="w-4 h-4 text-rose-400" />
-                )}
-                <span className="text-sm text-purple-200/80">
-                  {lobbyPlayers.length}/{lobbySettings.maxPlayers}명
-                </span>
+            )}
+
+            {inviteUrl && (
+              <div className="mb-6">
+                <p className="mb-2 text-sm uppercase tracking-widest text-purple-300/70">
+                  초대 링크
+                </p>
+                <div className="flex items-stretch overflow-hidden rounded-lg border border-purple-500/40 bg-black/30">
+                  <p className="min-w-0 flex-1 break-all px-3 py-3 font-mono text-sm leading-relaxed text-purple-100/90 select-all">
+                    {inviteUrl}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={copyInvite}
+                    aria-label="링크 복사"
+                    className="group/copy flex shrink-0 items-center justify-center px-3 text-purple-200"
+                  >
+                    {copiedInvite ? (
+                      <Check className="h-5 w-5 text-emerald-400 transition-opacity group-hover/copy:opacity-70" />
+                    ) : (
+                      <Copy className="h-5 w-5 transition-opacity group-hover/copy:opacity-60" />
+                    )}
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="flex flex-wrap gap-2 mb-6">
-              <button
-                type="button"
-                onClick={copyInvite}
-                className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs bg-purple-500/25 border border-purple-400/40 hover:bg-purple-500/35"
-              >
-                {copied ? (
-                  <Check className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
-                초대 링크 복사
-              </button>
-              <button
-                type="button"
-                onClick={leaveRoom}
-                className="rounded-full px-4 py-2 text-xs text-rose-200 border border-rose-500/40 hover:bg-rose-950/40"
-              >
-                나가기
-              </button>
-            </div>
-
-            <h3 className="text-sm font-semibold text-purple-200 mb-3 flex items-center gap-2">
-              <Users className="w-4 h-4" />
+            <h3 className="text-base font-semibold text-purple-200 mb-3 flex items-center gap-2">
+              <Users className="w-5 h-5" />
               대기 중인 플레이어
             </h3>
             <ul className="space-y-2 mb-6">
               {lobbyPlayers.map((p) => (
                 <li
                   key={p.peerId}
-                  className="flex items-center justify-between rounded-lg bg-black/25 px-4 py-2 text-sm"
+                  className="flex items-center justify-between rounded-lg bg-black/25 px-4 py-2.5 text-base"
                 >
                   <span>
                     {p.nickname}
                     {p.seat === 0 && isHost && p.peerId === myPeerIdRef.current && (
-                      <span className="ml-2 text-[10px] text-amber-300/90">
+                      <span className="ml-2 text-sm text-amber-300/90">
                         (나 · 호스트)
                       </span>
                     )}
                     {p.seat === 0 && !(p.peerId === myPeerIdRef.current) && (
-                      <span className="ml-2 text-[10px] text-amber-300/90">
+                      <span className="ml-2 text-sm text-amber-300/90">
                         호스트
                       </span>
                     )}
                   </span>
-                  <span className="text-purple-400/60 text-xs">
+                  <span className="text-purple-400/60 text-sm">
                     #{p.seat + 1}
                   </span>
                 </li>
@@ -628,8 +737,8 @@ export default function LexioOnline() {
             {isHost && (
               <div className="space-y-4 mb-6 border-t border-purple-500/20 pt-4">
                 <div>
-                  <label className="text-xs text-purple-200/80">
-                    세션 총 판 수 (최대 {MAX_SESSION_ROUNDS})
+                  <label className="text-sm text-purple-200/80">
+                    총 라운드 수 (최대 {MAX_SESSION_ROUNDS})
                   </label>
                   <div className="flex items-center gap-4 mt-1">
                     <input
@@ -644,30 +753,39 @@ export default function LexioOnline() {
                       }
                       className="flex-1 accent-purple-400"
                     />
-                    <span className="font-mono text-sm w-8 text-right">
+                    <span className="font-mono text-base w-10 text-right">
                       {lobbySettings.totalRounds}
                     </span>
                   </div>
                 </div>
                 <div>
-                  <label className="text-xs text-purple-200/80">
+                  <label className="text-sm text-purple-200/80">
                     최대 인원 ({MIN_ONLINE_PLAYERS}~{MAX_ONLINE_PLAYERS})
                   </label>
-                  <select
-                    value={lobbySettings.maxPlayers}
-                    onChange={(e) =>
-                      updateHostSettings({
-                        maxPlayers: Number(e.target.value),
-                      })
+                  <Select
+                    value={String(lobbySettings.maxPlayers)}
+                    onValueChange={(value) =>
+                      updateHostSettings({ maxPlayers: Number(value) })
                     }
-                    className="mt-1 w-full rounded-lg bg-black/30 border border-purple-500/40 px-3 py-2 text-sm"
                   >
-                    {[3, 4, 5].map((n) => (
-                      <option key={n} value={n}>
-                        {n}명
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="mt-1 h-auto w-full rounded-lg border-purple-500/40 bg-black/30 py-2.5 text-base text-purple-100 shadow-none focus-visible:border-purple-400/70 focus-visible:ring-2 focus-visible:ring-purple-500/30 dark:border-purple-500/40 dark:bg-black/30 dark:hover:bg-black/40 [&_svg]:text-purple-300/80">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent
+                      position="popper"
+                      className="border-purple-500/40 bg-[#1e1b4b] text-purple-100 shadow-xl shadow-black/50"
+                    >
+                      {[3, 4, 5].map((n) => (
+                        <SelectItem
+                          key={n}
+                          value={String(n)}
+                          className="cursor-pointer text-base text-purple-100 focus:bg-purple-500/30 focus:text-purple-50 data-[highlighted]:bg-purple-500/30 data-[highlighted]:text-purple-50"
+                        >
+                          {n}명
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             )}
@@ -677,191 +795,174 @@ export default function LexioOnline() {
                 type="button"
                 onClick={hostStartGame}
                 disabled={lobbyPlayers.length < MIN_ONLINE_PLAYERS}
-                className="w-full flex items-center justify-center gap-2 rounded-full py-3 text-sm font-bold tracking-widest uppercase text-purple-100 bg-gradient-to-b from-purple-500/50 to-violet-800/60 border border-purple-400/50 disabled:opacity-40"
+                className="w-full flex items-center justify-center gap-2 rounded-full py-3.5 text-base font-bold tracking-widest uppercase text-purple-100 bg-gradient-to-b from-purple-500/50 to-violet-800/60 border border-purple-400/50 disabled:opacity-40"
               >
-                <Play className="w-5 h-5" />
+                <Play className="w-6 h-6" />
                 게임 시작 ({MIN_ONLINE_PLAYERS}명 이상)
               </button>
             ) : (
-              <p className="text-center text-sm text-purple-300/70 py-4">
+              <p className="text-center text-base text-purple-300/70 py-4">
                 호스트가 게임을 시작할 때까지 기다려주세요…
               </p>
             )}
           </div>
         )}
 
-        {screen === 'game' && gameView && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-purple-200/80">
-              <span>
-                {gameView.sessionCompletedRounds}/{gameView.sessionTotalRounds}
-                판 · 내 코인{' '}
-                {gameView.sessionCoinsBySeat[gameView.yourSeat] ?? 0}
-              </span>
-              <button
-                type="button"
-                onClick={leaveRoom}
-                className="text-rose-300/90 hover:text-rose-200"
-              >
-                방 나가기
-              </button>
+        {screen === 'game' && gameView && sceneBundle && (
+          <div className="relative h-[100dvh] w-full overflow-hidden">
+            <div className="absolute inset-0 z-0">
+              <LexioFirstPersonScene
+                players={sceneBundle.players}
+                currentPlayerIdx={gameView.currentPlayerIdx}
+                humanPlayer={sceneBundle.humanPlayer}
+                currentPlay={gameView.currentPlay}
+                selectedIds={selectedIds}
+                onToggleTile={toggleSelect}
+                phase={gameView.phase}
+                discardPlacements={gameView.discardPlacements ?? []}
+                finishTableUi={sceneBundle.finishTableUi}
+                sessionCoinsByPlayerId={sceneBundle.sessionCoinsByPlayerId}
+              />
             </div>
 
-            {/* 다른 플레이어 */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {gameView.players
-                .filter((p) => !p.isYou)
-                .map((p) => (
-                  <div
-                    key={p.seat}
-                    className={`rounded-xl px-3 py-2 border text-sm ${
-                      gameView.currentPlayerIdx === p.seat &&
-                      gameView.phase === 'playing'
-                        ? 'border-purple-400/70 bg-purple-500/15'
-                        : 'border-white/10 bg-black/25'
-                    }`}
-                  >
-                    <div className="font-medium truncate">{p.name}</div>
-                    <div className="text-xs text-purple-300/70">
-                      {p.handCount}장
-                      {p.passed && ' · 패스'}
-                    </div>
-                  </div>
-                ))}
-            </div>
-
-            {/* 테이블 현재 패 */}
-            <div
-              className="rounded-2xl min-h-[120px] flex flex-col items-center justify-center p-4 border border-purple-500/30"
-              style={{ background: 'rgba(0,0,0,0.35)' }}
-            >
-              {gameView.currentPlay ? (
-                <>
-                  <p className="text-xs text-purple-300/80 mb-2">
-                    {comboKorean(gameView.currentPlay.type)} ·{' '}
-                    {gameView.players[gameView.trickStarterIdx ?? 0]?.name}
-                  </p>
-                  <div className="flex flex-wrap gap-1 justify-center">
-                    {gameView.currentPlay.tiles.map((t) => (
-                      <LexioPlayCard
-                        key={t.id}
-                        number={t.number}
-                        suit={lexioColorToSuit(t.color)}
-                        small
-                      />
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-purple-300/50">
-                  {gameView.phase === 'playing'
-                    ? '새 트릭 — 리드 대기'
-                    : '—'}
+            {statusMessage && (
+              <div className="pointer-events-none absolute left-0 right-0 top-20 z-10 flex justify-center px-4">
+                <p
+                  className="pointer-events-none max-w-xl rounded-full px-5 py-2.5 text-center text-sm tracking-wider text-purple-100 shadow-lg sm:text-base"
+                  style={{
+                    background: 'rgba(10,10,35,0.72)',
+                    boxShadow:
+                      'inset 0 0 0 1px rgba(168,85,247,0.35), 0 8px 32px rgba(0,0,0,0.45)',
+                  }}
+                >
+                  {statusMessage}
                 </p>
-              )}
-            </div>
-
-            {/* 내 손패 */}
-            <div>
-              <p className="text-xs text-purple-300/80 mb-2">
-                내 패 ({gameView.yourHand.length}장)
-                {isMyTurn && (
-                  <span className="ml-2 text-purple-200 font-semibold">
-                    · 당신 차례
-                  </span>
-                )}
-              </p>
-              <div className="flex flex-wrap gap-1 justify-center pb-2">
-                {gameView.yourHand.map((t) => {
-                  const sel = selectedIds.includes(t.id);
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() =>
-                        setSelectedIds((prev) =>
-                          prev.includes(t.id)
-                            ? prev.filter((id) => id !== t.id)
-                            : [...prev, t.id],
-                        )
-                      }
-                      disabled={gameView.phase !== 'playing'}
-                      className={`transition-transform ${sel ? '-translate-y-2 ring-2 ring-purple-400 rounded-lg' : ''}`}
-                    >
-                      <LexioPlayCard
-                        number={t.number}
-                        suit={lexioColorToSuit(t.color)}
-                        small
-                      />
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {gameView.phase === 'playing' && (
-              <div className="flex flex-wrap justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={handlePass}
-                  disabled={!isMyTurn || !gameView.currentPlay}
-                  className="rounded-full px-6 py-2 text-xs font-semibold uppercase text-rose-100 bg-rose-950/50 border border-rose-500/40 disabled:opacity-40"
-                >
-                  패스
-                </button>
-                <button
-                  type="button"
-                  onClick={handlePlay}
-                  disabled={!canPlay}
-                  className="rounded-full px-8 py-2 text-xs font-bold uppercase text-purple-100 bg-gradient-to-b from-purple-500/50 to-violet-800/60 border border-purple-400/50 disabled:opacity-40"
-                >
-                  내기
-                </button>
               </div>
             )}
 
-            {gameView.phase === 'finished' && (
-              <div
-                className="rounded-2xl p-6 text-center border border-amber-500/30"
-                style={{ background: 'rgba(0,0,0,0.4)' }}
-              >
-                <p className="text-lg font-serif text-amber-100 mb-2">
-                  {gameView.players.find((p) => p.seat === gameView.winnerSeat)
-                    ?.name ?? '—'}
-                  님 승리!
-                </p>
-                <ul className="text-sm text-purple-200/80 space-y-1 mb-4">
-                  {gameView.lastRoundCoinRows.map((r) => {
-                    const pl = gameView.players.find(
-                      (p) => p.seat === r.playerId,
-                    );
-                    return (
-                      <li key={r.playerId}>
-                        {pl?.name}: +{r.earned}
-                        {r.doubled ? ' (×2)' : ''}
-                      </li>
-                    );
-                  })}
-                </ul>
-                {isHost && sessionHasNext && (
-                  <button
-                    type="button"
-                    onClick={hostNextRound}
-                    className="rounded-full px-8 py-2 text-xs font-bold uppercase text-purple-100 bg-gradient-to-b from-purple-500/50 to-violet-800/60 border border-purple-400/50"
-                  >
-                    다음 판
-                  </button>
-                )}
-                {!isHost && sessionHasNext && (
-                  <p className="text-xs text-purple-300/60">
-                    호스트가 다음 판을 시작합니다…
-                  </p>
-                )}
-                {!sessionHasNext && (
-                  <p className="text-xs text-purple-300/60">
-                    세션 종료 — 방을 나가 새 게임을 시작하세요.
-                  </p>
-                )}
+            {sceneBundle.humanPlayer && (
+              <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-[#0a0a23]/95 via-[#0a0a23]/55 to-transparent px-4 pb-6 pt-16">
+                <div className="pointer-events-none mx-auto flex max-w-2xl flex-col items-center gap-3">
+                  <div className="flex flex-col items-center gap-0.5">
+                    <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-purple-200/90 sm:text-base">
+                      <Users className="h-4 w-4 text-purple-300" />
+                      <span className="font-semibold">
+                        {sceneBundle.humanPlayer.name}
+                      </span>
+                      <span className="text-purple-300/75">
+                        ({sceneBundle.humanPlayer.hand.length}장)
+                      </span>
+                      {isMyTurn && gameView.phase === 'playing' && (
+                        <span
+                          className="ml-1 rounded-full px-2.5 py-0.5 text-xs tracking-[0.25em] uppercase sm:text-sm"
+                          style={{
+                            background:
+                              'linear-gradient(180deg, rgba(168,85,247,0.5) 0%, rgba(91,33,182,0.6) 100%)',
+                            boxShadow: 'inset 0 0 0 1px rgba(168,85,247,0.8)',
+                          }}
+                        >
+                          당신 차례
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-sm font-medium tabular-nums text-amber-200/90 sm:text-base">
+                      🪙{' '}
+                      {gameView.sessionCoinsBySeat[gameView.yourSeat] ?? 0}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    {gameView.phase === 'playing' &&
+                      selectedTiles.length > 0 &&
+                      selectedCombo && (
+                        <span className="rounded-full bg-purple-500/20 px-3 py-1.5 text-sm text-purple-100">
+                          선택: {comboKorean(selectedCombo.type)} (
+                          {selectedTiles.length}장)
+                        </span>
+                      )}
+                    {gameView.phase === 'playing' &&
+                      selectedTiles.length > 0 &&
+                      !selectedCombo && (
+                        <span className="rounded-full bg-rose-500/20 px-3 py-1.5 text-sm text-rose-200">
+                          유효하지 않은 조합
+                        </span>
+                      )}
+                  </div>
+
+                  {gameView.phase === 'finished' ? (
+                    <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-3">
+                      {isHost && sessionHasNext ? (
+                        <button
+                          type="button"
+                          onClick={hostNextRound}
+                          className="rounded-full px-10 py-3 text-sm font-bold tracking-[0.25em] text-purple-100 transition-all hover:-translate-y-0.5 sm:text-base"
+                          style={{
+                            background:
+                              'linear-gradient(180deg, rgba(168,85,247,0.5) 0%, rgba(91,33,182,0.6) 100%)',
+                            boxShadow:
+                              'inset 0 0 0 1px rgba(168,85,247,0.8), 0 10px 24px -8px rgba(168,85,247,0.55)',
+                          }}
+                        >
+                          다음 판
+                          <span className="ml-2.5 font-mono text-xs font-semibold tracking-normal text-purple-200/90">
+                            Enter
+                          </span>
+                        </button>
+                      ) : !sessionHasNext ? (
+                        <button
+                          type="button"
+                          onClick={leaveRoom}
+                          className="rounded-full px-10 py-3 text-sm font-bold tracking-[0.25em] text-slate-100 transition-all hover:-translate-y-0.5 sm:text-base"
+                          style={{
+                            background: 'rgba(255,255,255,0.08)',
+                            boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.22)',
+                          }}
+                        >
+                          방 나가기
+                        </button>
+                      ) : (
+                        <p className="text-sm text-purple-300/70 sm:text-base">
+                          호스트가 다음 판을 시작합니다…
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-3">
+                      {isMyTurn && gameView.phase === 'playing' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handlePass}
+                            disabled={!gameView.currentPlay}
+                            className="rounded-full px-7 py-2.5 text-sm tracking-[0.3em] font-semibold uppercase text-rose-100 transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 sm:text-base"
+                            style={{
+                              background:
+                                'linear-gradient(180deg, rgba(159,18,57,0.4) 0%, rgba(76,5,25,0.55) 100%)',
+                              boxShadow:
+                                'inset 0 0 0 1px rgba(244,63,94,0.55), 0 8px 20px -10px rgba(244,63,94,0.4)',
+                            }}
+                          >
+                            패스
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handlePlay}
+                            disabled={!canPlay}
+                            className="rounded-full px-9 py-2.5 text-sm tracking-[0.3em] font-bold uppercase text-purple-100 transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 sm:text-base"
+                            style={{
+                              background:
+                                'linear-gradient(180deg, rgba(168,85,247,0.5) 0%, rgba(91,33,182,0.6) 100%)',
+                              boxShadow:
+                                'inset 0 0 0 1px rgba(168,85,247,0.8), 0 10px 24px -8px rgba(168,85,247,0.55)',
+                            }}
+                          >
+                            내기
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
