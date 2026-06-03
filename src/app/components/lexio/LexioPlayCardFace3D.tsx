@@ -711,24 +711,31 @@ export function LexioPlayCardFace3D({
       {!isFancyTwo && (
         <>
           <GlowText
-            position={[hw - width * 0.1, -hh + height * 0.16, 0.005]}
-            fontSize={height * 0.13}
+            position={[hw - width * 0.1, -hh + height * 0.16, 0.018]}
+            fontSize={height * 0.195}
             color={face.color}
-            fillOpacity={0.35}
-            renderOrder={renderOrder + 3}
+            fillOpacity={1}
+            renderOrder={renderOrder + 45}
             anchorX="right"
             anchorY="middle"
+            font={WATERMARK_FONT}
+            depthTest={false}
           >
             {face.mark}
           </GlowText>
           <GlowText
-            position={[hw - width * 0.1, -hh + height * 0.16, 0.006]}
-            fontSize={height * 0.13}
+            position={[hw - width * 0.1, -hh + height * 0.16, 0.019]}
+            fontSize={height * 0.195}
             color={face.color}
-            outlineWidth={height * 0.006}
-            renderOrder={renderOrder + 4}
+            fillOpacity={0}
+            strokeWidth={height * 0.012}
+            strokeColor={face.color}
+            strokeOpacity={0.85}
+            renderOrder={renderOrder + 46}
             anchorX="right"
             anchorY="middle"
+            font={WATERMARK_FONT}
+            depthTest={false}
           >
             {face.mark}
           </GlowText>

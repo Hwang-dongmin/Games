@@ -157,7 +157,7 @@ export function LexioPlayCard({
   const face = LEXIO_SUIT_FACE[suit];
   const frame = FANCY_TWO_FRAME[suit];
   const isFancyTwo = number === 2;
-  const { Icon, iconClass, numberClass } = SUIT_CONFIG[suit];
+  const { numberClass } = SUIT_CONFIG[suit];
   const tight = small && rulesTight;
   const numCls = small
     ? tight
@@ -319,18 +319,20 @@ export function LexioPlayCard({
             </div>
           </span>
           <div className="relative z-[1] flex items-end justify-end">
-            <Icon
+            <span
               className={[
+                'leading-none',
                 small
                   ? tight
-                    ? 'h-3.5 w-3.5 shrink-0'
-                    : 'h-4 w-4 shrink-0'
-                  : 'h-5 w-5 shrink-0',
-                iconClass,
+                    ? 'text-[22.5px]'
+                    : 'text-[24px]'
+                  : 'text-[27px]',
+                numberClass,
               ].join(' ')}
-              strokeWidth={2.25}
               aria-hidden
-            />
+            >
+              {face.mark}
+            </span>
           </div>
         </>
       )}
