@@ -35,10 +35,7 @@ import {
 } from '../utils/lexio';
 import LexioFirstPersonScene from './lexio/LexioFirstPersonScene';
 import LexioOfflineSetup from './lexio/LexioOfflineSetup';
-import {
-  LexioPlayCard,
-  lexioColorToSuit,
-} from '../components/lexio/LexioPlayCard';
+import { LexioPlayCard } from '../components/lexio/LexioPlayCard';
 
 type DiscardPlacement = {
   key: string;
@@ -1421,23 +1418,6 @@ export default function Lexio() {
                 sessionCoinsByPlayerId={sessionCoinsByPlayerId}
               />
             </div>
-
-            {/* 모바일: 현재 패 카드 */}
-            {currentPlay && (
-              <div className="pointer-events-none absolute left-0 right-0 top-[4.5rem] z-10 flex justify-center px-3 sm:hidden">
-                <div className="pointer-events-auto flex max-w-full gap-1 overflow-x-auto rounded-xl border border-purple-500/25 bg-[#0a0a23]/85 px-2 py-1.5 backdrop-blur-md">
-                  {currentPlay.tiles.map((t) => (
-                    <div key={t.id} className="shrink-0">
-                      <LexioPlayCard
-                        number={t.number}
-                        suit={lexioColorToSuit(t.color)}
-                        small
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* HUD: 중앙 메시지 — 사용자 액션 가이드/에러가 있을 때만 표시 */}
             {message && (
