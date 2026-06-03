@@ -42,14 +42,33 @@
   }
 }
 
+@keyframes lexioMenuFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
 .lexio-menu-overlay {
-  animation: lexioMenuFadeIn 2s ease forwards;
+  animation: lexioMenuFadeIn 0.4s ease-out forwards;
   opacity: 0;
 }
 
+.lexio-menu-overlay.lexio-menu-closing {
+  animation: lexioMenuFadeOut 0.2s ease-in forwards;
+  opacity: 1;
+}
+
 .lexio-menu-dialog {
-  animation: lexioMenuFadeIn 2s ease forwards;
+  animation: lexioMenuFadeIn 0.4s ease-out forwards;
   opacity: 0;
+}
+
+.lexio-menu-dialog.lexio-menu-closing {
+  animation: lexioMenuFadeOut 0.2s ease-in forwards;
+  opacity: 1;
 }
 
 .lexio-rules-panel {

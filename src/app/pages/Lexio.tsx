@@ -258,6 +258,10 @@ export default function Lexio() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [message, setMessage] = useState('');
   const [lexioMenuOpen, setLexioMenuOpen] = useState(false);
+  const [lexioMenuClosing, setLexioMenuClosing] = useState(false);
+  const lexioMenuCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [lexioModalView, setLexioModalView] = useState<
     'home' | 'rules' | 'newGame'
   >('home');
@@ -727,23 +731,46 @@ export default function Lexio() {
   ]);
 
   const closeLexioMenu = useCallback(() => {
-    setLexioMenuOpen(false);
-    setLexioModalView('home');
-  }, []);
+    if (lexioMenuClosing) return;
+    setLexioMenuClosing(true);
+    if (lexioMenuCloseTimerRef.current) {
+      clearTimeout(lexioMenuCloseTimerRef.current);
+    }
+    lexioMenuCloseTimerRef.current = setTimeout(() => {
+      setLexioMenuOpen(false);
+      setLexioMenuClosing(false);
+      setLexioModalView('home');
+      lexioMenuCloseTimerRef.current = null;
+    }, 200);
+  }, [lexioMenuClosing]);
 
   const openLexioOptions = useCallback(() => {
+    if (lexioMenuCloseTimerRef.current) {
+      clearTimeout(lexioMenuCloseTimerRef.current);
+      lexioMenuCloseTimerRef.current = null;
+    }
+    setLexioMenuClosing(false);
     setLexioModalView('home');
     setLexioMenuOpen(true);
   }, []);
 
+  useEffect(
+    () => () => {
+      if (lexioMenuCloseTimerRef.current) {
+        clearTimeout(lexioMenuCloseTimerRef.current);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
-    if (!lexioMenuOpen) return;
+    if (!lexioMenuOpen || lexioMenuClosing) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeLexioMenu();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [lexioMenuOpen, closeLexioMenu]);
+  }, [lexioMenuOpen, lexioMenuClosing, closeLexioMenu]);
 
   return (
     <div
@@ -757,12 +784,12 @@ export default function Lexio() {
             }
       }
     >
-      {/* 옵션: 중앙 모달 — 규칙 / 새 게임 (2초 페이드인) */}
+      {/* 옵션: 중앙 모달 — 규칙 / 새 게임 */}
       {lexioMenuOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button
             type="button"
-            className="lexio-menu-overlay absolute inset-0 bg-black/75 backdrop-blur-md"
+            className={`lexio-menu-overlay absolute inset-0 bg-black/75 backdrop-blur-md${lexioMenuClosing ? ' lexio-menu-closing' : ''}`}
             aria-label="메뉴 닫기"
             onClick={closeLexioMenu}
           />
@@ -770,9 +797,9 @@ export default function Lexio() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="lexio-modal-title"
-            className={`lexio-rules-panel lexio-menu-dialog relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden rounded-2xl shadow-2xl ${
-              lexioModalView === 'home' ? 'max-w-md' : 'max-w-3xl'
-            }`}
+            className={`lexio-rules-panel lexio-menu-dialog relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden rounded-2xl shadow-2xl${
+              lexioMenuClosing ? ' lexio-menu-closing' : ''
+            } ${lexioModalView === 'home' ? 'max-w-md' : 'max-w-3xl'}`}
             style={{
               background:
                 'linear-gradient(180deg, #1e1b4b 0%, #0a0a23 100%)',
@@ -847,11 +874,7 @@ export default function Lexio() {
                 <button
                   type="button"
                   onClick={() => setLexioModalView('rules')}
-                  className="flex min-h-[5.5rem] w-full flex-col items-center justify-center gap-2 rounded-2xl px-3 py-4 text-center text-sm font-semibold leading-snug tracking-wide text-purple-100 transition-all hover:-translate-y-0.5 sm:min-h-[6.25rem] sm:px-4"
-                  style={{
-                    background: 'rgba(255,255,255,0.06)',
-                    boxShadow: 'inset 0 0 0 1px rgba(168,85,247,0.45)',
-                  }}
+                  className="flex min-h-[5.5rem] w-full flex-col items-center justify-center gap-2 rounded-2xl bg-white/[0.06] px-3 py-4 text-center text-sm font-semibold leading-snug tracking-wide text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.45)] transition-colors duration-200 hover:bg-white/[0.12] hover:text-white hover:shadow-[inset_0_0_0_1px_rgba(168,85,247,0.7)] sm:min-h-[6.25rem] sm:px-4"
                 >
                   <BookOpen className="h-5 w-5 shrink-0 sm:h-6 sm:w-6" />
                   게임 규칙
@@ -859,13 +882,7 @@ export default function Lexio() {
                 <button
                   type="button"
                   onClick={() => setLexioModalView('newGame')}
-                  className="flex min-h-[5.5rem] w-full flex-col items-center justify-center gap-2 rounded-2xl px-3 py-4 text-center text-sm font-semibold leading-snug tracking-wide text-purple-100 transition-all hover:-translate-y-0.5 sm:min-h-[6.25rem] sm:px-4"
-                  style={{
-                    background:
-                      'linear-gradient(180deg, rgba(168,85,247,0.45) 0%, rgba(91,33,182,0.55) 100%)',
-                    boxShadow:
-                      'inset 0 0 0 1px rgba(168,85,247,0.7), 0 8px 20px -10px rgba(168,85,247,0.45)',
-                  }}
+                  className="flex min-h-[5.5rem] w-full flex-col items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-purple-500/45 to-violet-800/55 px-3 py-4 text-center text-sm font-semibold leading-snug tracking-wide text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.7),0_8px_20px_-10px_rgba(168,85,247,0.45)] transition-colors duration-200 hover:from-purple-400/55 hover:to-violet-700/65 hover:text-white sm:min-h-[6.25rem] sm:px-4"
                 >
                   <RotateCcw className="h-5 w-5 shrink-0 sm:h-6 sm:w-6" />
                   새 게임
@@ -1213,11 +1230,7 @@ export default function Lexio() {
                     <button
                       type="button"
                       onClick={closeLexioMenu}
-                      className="flex-1 rounded-full px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-200 transition-all hover:-translate-y-0.5"
-                      style={{
-                        background: 'rgba(255,255,255,0.04)',
-                        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.15)',
-                      }}
+                      className="flex-1 rounded-full bg-white/[0.04] px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-200 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.15)] transition-colors duration-200 hover:bg-white/10 hover:text-white"
                     >
                       취소
                     </button>
@@ -1227,13 +1240,7 @@ export default function Lexio() {
                         closeLexioMenu();
                         resetSessionToSetup();
                       }}
-                      className="flex-1 rounded-full px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-purple-100 transition-all hover:-translate-y-0.5"
-                      style={{
-                        background:
-                          'linear-gradient(180deg, rgba(168,85,247,0.4) 0%, rgba(91,33,182,0.5) 100%)',
-                        boxShadow:
-                          'inset 0 0 0 1px rgba(168,85,247,0.65), 0 8px 20px -10px rgba(168,85,247,0.5)',
-                      }}
+                      className="flex-1 rounded-full bg-gradient-to-b from-purple-500/40 to-violet-800/50 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.65),0_8px_20px_-10px_rgba(168,85,247,0.5)] transition-colors duration-200 hover:from-purple-400/50 hover:to-violet-700/60 hover:text-white"
                     >
                       확인
                     </button>
@@ -1246,13 +1253,7 @@ export default function Lexio() {
                     closeLexioMenu();
                     beginNewSessionFromSetup();
                   }}
-                  className="w-full rounded-full px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-purple-100 transition-all hover:-translate-y-0.5"
-                  style={{
-                    background:
-                      'linear-gradient(180deg, rgba(168,85,247,0.4) 0%, rgba(91,33,182,0.5) 100%)',
-                    boxShadow:
-                      'inset 0 0 0 1px rgba(168,85,247,0.65), 0 8px 20px -10px rgba(168,85,247,0.5)',
-                  }}
+                  className="w-full rounded-full bg-gradient-to-b from-purple-500/40 to-violet-800/50 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.65),0_8px_20px_-10px_rgba(168,85,247,0.5)] transition-colors duration-200 hover:from-purple-400/50 hover:to-violet-700/60 hover:text-white"
                 >
                   게임 시작
                 </button>
@@ -1263,11 +1264,7 @@ export default function Lexio() {
                     closeLexioMenu();
                     resetSessionToSetup();
                   }}
-                  className="w-full rounded-full px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-200 transition-all hover:-translate-y-0.5"
-                  style={{
-                    background: 'rgba(255,255,255,0.06)',
-                    boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.18)',
-                  }}
+                  className="w-full rounded-full bg-white/[0.06] px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-200 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.18)] transition-colors duration-200 hover:bg-white/10 hover:text-white"
                 >
                   처음 화면으로
                 </button>
@@ -1289,11 +1286,7 @@ export default function Lexio() {
         >
           <Link
             to="/"
-            className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs tracking-[0.3em] uppercase font-semibold text-purple-100 transition-all hover:-translate-y-0.5"
-            style={{
-              background: 'rgba(255,255,255,0.05)',
-              boxShadow: 'inset 0 0 0 1px rgba(168,85,247,0.4)',
-            }}
+            className="inline-flex items-center gap-2 rounded-full bg-white/[0.05] px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.4)] transition-colors duration-200 hover:bg-white/[0.12] hover:text-white hover:shadow-[inset_0_0_0_1px_rgba(168,85,247,0.7)]"
           >
             <Home className="w-4 h-4" />
             홈
@@ -1316,13 +1309,7 @@ export default function Lexio() {
             <button
               type="button"
               onClick={openLexioOptions}
-              className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs tracking-[0.25em] font-semibold text-purple-100 transition-all hover:-translate-y-0.5 sm:px-4"
-              style={{
-                background:
-                  'linear-gradient(180deg, rgba(168,85,247,0.35) 0%, rgba(91,33,182,0.45) 100%)',
-                boxShadow:
-                  'inset 0 0 0 1px rgba(168,85,247,0.55), 0 8px 20px -10px rgba(168,85,247,0.45)',
-              }}
+              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-b from-purple-500/35 to-violet-800/45 px-3 py-2 text-xs font-semibold tracking-[0.25em] text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.55),0_8px_20px_-10px_rgba(168,85,247,0.45)] transition-colors duration-200 hover:from-purple-400/45 hover:to-violet-700/55 hover:text-white sm:px-4"
               aria-label="옵션"
             >
               <Settings className="h-4 w-4 shrink-0 sm:h-[18px] sm:w-[18px]" />
