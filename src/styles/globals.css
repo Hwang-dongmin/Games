@@ -313,6 +313,297 @@
   }
 }
 
+/* Lexio session ranking panel */
+@keyframes lexioRankingCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.lexio-ranking-overlay {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 42%, rgba(124, 58, 237, 0.18), transparent 70%),
+    rgba(10, 10, 35, 0.58);
+  backdrop-filter: blur(6px);
+}
+
+.lexio-ranking-card {
+  position: relative;
+  overflow: hidden;
+  animation: lexioRankingCardIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(168, 85, 247, 0.22), transparent 46%),
+    radial-gradient(circle at 92% 18%, rgba(251, 191, 36, 0.1), transparent 40%),
+    linear-gradient(180deg, rgba(28, 24, 62, 0.97) 0%, rgba(10, 10, 35, 0.98) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(216, 180, 254, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 28px 60px -28px rgba(0, 0, 0, 0.82),
+    0 0 72px -24px rgba(124, 58, 237, 0.42);
+}
+
+.lexio-ranking-card--collapsed {
+  box-shadow:
+    inset 0 0 0 1px rgba(216, 180, 254, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 16px 40px -20px rgba(0, 0, 0, 0.72),
+    0 0 48px -16px rgba(124, 58, 237, 0.38);
+}
+
+.lexio-ranking-card-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(196, 181, 253, 0.16);
+  pointer-events: none;
+}
+
+.lexio-ranking-card-glow {
+  position: absolute;
+  inset: -35%;
+  background: conic-gradient(
+    from 210deg,
+    transparent,
+    rgba(168, 85, 247, 0.09),
+    transparent,
+    rgba(251, 191, 36, 0.07),
+    transparent
+  );
+  animation: spin 18s linear infinite;
+  pointer-events: none;
+}
+
+.lexio-ranking-header {
+  position: relative;
+  z-index: 1;
+  padding: 1rem 1rem 1.1rem;
+}
+
+@media (min-width: 640px) {
+  .lexio-ranking-header {
+    padding: 1.15rem 1.25rem 1.25rem;
+  }
+}
+
+.lexio-ranking-header-action {
+  position: absolute;
+  top: 0.875rem;
+  right: 0.875rem;
+  z-index: 2;
+  width: 2rem;
+  height: 2rem;
+}
+
+@media (min-width: 640px) {
+  .lexio-ranking-header-action {
+    top: 1rem;
+    right: 1rem;
+  }
+}
+
+.lexio-ranking-winner-block {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  margin-inline: auto;
+  max-width: 100%;
+  padding-inline: 2.75rem;
+}
+
+.lexio-ranking-crown-wrap {
+  display: flex;
+  height: 2.75rem;
+  width: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 35% 25%, rgba(253, 230, 138, 0.35), rgba(180, 83, 9, 0.12));
+  box-shadow:
+    inset 0 0 0 1px rgba(251, 191, 36, 0.42),
+    0 0 24px -4px rgba(251, 191, 36, 0.45);
+}
+
+.lexio-ranking-winner-lines {
+  display: flex;
+  width: 100%;
+  max-width: 16rem;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.lexio-ranking-winner-line {
+  height: 1px;
+  flex: 1;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(251, 191, 36, 0.55),
+    transparent
+  );
+}
+
+.lexio-ranking-winner-title {
+  font-family: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+  font-size: clamp(1.35rem, 4.5vw, 1.75rem);
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.02em;
+  color: #fef3c7;
+  text-shadow: 0 0 28px rgba(251, 191, 36, 0.28);
+}
+
+.lexio-ranking-collapse-btn {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  padding: 0;
+  color: rgba(233, 213, 255, 0.88);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow:
+    inset 0 0 0 1px rgba(196, 181, 253, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(6px);
+  transition:
+    background 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.lexio-ranking-collapse-btn:hover {
+  color: #fff;
+  background: rgba(168, 85, 247, 0.16);
+  box-shadow:
+    inset 0 0 0 1px rgba(168, 85, 247, 0.42),
+    0 6px 18px -10px rgba(124, 58, 237, 0.45);
+}
+
+.lexio-ranking-collapse-btn svg {
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.lexio-ranking-expand-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(196, 181, 253, 0.88);
+  pointer-events: none;
+}
+
+.lexio-ranking-list-wrap {
+  position: relative;
+  z-index: 1;
+}
+
+.lexio-ranking-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.35rem 1rem 1.1rem;
+}
+
+@media (min-width: 640px) {
+  .lexio-ranking-list {
+    padding: 0.35rem 1.25rem 1.25rem;
+  }
+}
+
+.lexio-ranking-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 0.9rem;
+  padding: 0.65rem 0.85rem;
+  background: rgba(255, 255, 255, 0.035);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.lexio-ranking-row--top {
+  background: linear-gradient(
+    90deg,
+    rgba(251, 191, 36, 0.14) 0%,
+    rgba(255, 255, 255, 0.04) 55%
+  );
+  box-shadow:
+    inset 0 0 0 1px rgba(251, 191, 36, 0.32),
+    inset 3px 0 0 rgba(251, 191, 36, 0.75);
+}
+
+.lexio-ranking-row--human:not(.lexio-ranking-row--top) {
+  box-shadow:
+    inset 0 0 0 1px rgba(168, 85, 247, 0.38),
+    inset 3px 0 0 rgba(168, 85, 247, 0.65);
+}
+
+.lexio-ranking-badge {
+  display: flex;
+  height: 2rem;
+  width: 2rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: rgba(233, 213, 255, 0.88);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+@media (min-width: 640px) {
+  .lexio-ranking-badge {
+    font-size: 1.0625rem;
+  }
+}
+
+.lexio-ranking-badge--1 {
+  color: #fde68a;
+  background: radial-gradient(circle at 35% 30%, rgba(253, 230, 138, 0.35), rgba(146, 64, 14, 0.22));
+  box-shadow:
+    inset 0 0 0 1px rgba(251, 191, 36, 0.5),
+    0 0 16px -6px rgba(251, 191, 36, 0.55);
+}
+
+.lexio-ranking-badge--2 {
+  color: #e9d5ff;
+  background: radial-gradient(circle at 35% 30%, rgba(216, 180, 254, 0.28), rgba(88, 28, 135, 0.2));
+  box-shadow: inset 0 0 0 1px rgba(192, 132, 252, 0.4);
+}
+
+.lexio-ranking-badge--3 {
+  color: #fbcfe8;
+  background: radial-gradient(circle at 35% 30%, rgba(251, 207, 232, 0.22), rgba(136, 19, 55, 0.18));
+  box-shadow: inset 0 0 0 1px rgba(244, 114, 182, 0.35);
+}
+
+.lexio-ranking-coins {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  border-radius: 9999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #fde68a;
+  background: rgba(251, 191, 36, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.22);
+}
+
 .lexio-welcome-overlay {
   background: rgba(10, 10, 35, 0.62);
   animation: lexioWelcomeOverlayIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;

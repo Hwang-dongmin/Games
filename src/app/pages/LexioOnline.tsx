@@ -25,6 +25,7 @@ import {
 } from '../components/ui/select';
 import LexioFirstPersonScene from './lexio/LexioFirstPersonScene';
 import LexioOnlineWelcomeOverlay from './lexio/LexioOnlineWelcomeOverlay';
+import LexioSessionRankingPanel from './lexio/LexioSessionRankingPanel';
 import { beats, comboKorean, detectCombo, aiFindMove, sortHand } from '../utils/lexio';
 import {
   buildOnlineFinishTableUi,
@@ -997,6 +998,15 @@ export default function LexioOnline() {
             {showWelcomeOverlay && (
               <LexioOnlineWelcomeOverlay leaving={welcomeLeaving} />
             )}
+
+            {gameView.phase === 'finished' &&
+              !sessionHasNext &&
+              sceneBundle.finishTableUi && (
+                <LexioSessionRankingPanel
+                  playersCoins={sceneBundle.finishTableUi.playersCoins}
+                  humanPlayerId={sceneBundle.humanPlayer?.id}
+                />
+              )}
 
             {statusMessage && (
               <div className="pointer-events-none absolute left-0 right-0 top-20 z-10 flex justify-center px-4">

@@ -35,6 +35,7 @@ import {
 } from '../utils/lexio';
 import LexioFirstPersonScene from './lexio/LexioFirstPersonScene';
 import LexioOfflineSetup from './lexio/LexioOfflineSetup';
+import LexioSessionRankingPanel from './lexio/LexioSessionRankingPanel';
 import { LexioPlayCard } from '../components/lexio/LexioPlayCard';
 import {
   buildDiscardPlacements,
@@ -1385,6 +1386,15 @@ export default function Lexio() {
                 sessionCoinsByPlayerId={sessionCoinsByPlayerId}
               />
             </div>
+
+            {phase === 'finished' &&
+              !sessionHasNextHand &&
+              finishTableUi && (
+                <LexioSessionRankingPanel
+                  playersCoins={finishTableUi.playersCoins}
+                  humanPlayerId={humanPlayer?.id}
+                />
+              )}
 
             {/* HUD: 중앙 메시지 — 사용자 액션 가이드/에러가 있을 때만 표시 */}
             {message && (
