@@ -30,7 +30,8 @@ export type WireMessage =
   | { type: 'game'; view: ClientGameView }
   | { type: 'action'; action: 'play' | 'pass'; tileIds?: number[] }
   | { type: 'error'; message: string }
-  | { type: 'host_left' };
+  | { type: 'host_left' }
+  | { type: 'player_left'; nickname: string };
 
 export function generateRoomCode(): string {
   let suffix = '';

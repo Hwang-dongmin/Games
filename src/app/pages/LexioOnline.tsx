@@ -92,6 +92,22 @@ export default function LexioOnline() {
   const myPeerIdRef = useRef('');
   const lobbySettingsRef = useRef(lobbySettings);
   lobbySettingsRef.current = lobbySettings;
+  const lobbyPlayersRef = useRef(lobbyPlayers);
+  lobbyPlayersRef.current = lobbyPlayers;
+  const statusClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+
+  const showTransientStatus = useCallback((message: string) => {
+    if (statusClearTimerRef.current) {
+      clearTimeout(statusClearTimerRef.current);
+    }
+    setStatusMessage(message);
+    statusClearTimerRef.current = setTimeout(() => {
+      setStatusMessage((current) => (current === message ? '' : current));
+      statusClearTimerRef.current = null;
+    }, 5000);
+  }, []);
 
   const inviteUrl = roomId ? buildInviteUrl(roomId) : '';
 
@@ -210,10 +226,36 @@ export default function LexioOnline() {
         setStatusMessage('호스트가 방을 나갔습니다.');
         setScreen('entry');
         break;
+      case 'player_left':
+        showTransientStatus(`${msg.nickname}님이 나갔습니다.`);
+        break;
       default:
         break;
     }
-  }, []);
+  }, [showTransientStatus]);
+
+  const handleGuestDisconnected = useCallback(
+    (peerId: string) => {
+      const leaving = lobbyPlayersRef.current.find((p) => p.peerId === peerId);
+      const next = lobbyPlayersRef.current.filter((p) => p.peerId !== peerId);
+
+      if (leaving) {
+        showTransientStatus(`${leaving.nickname}님이 나갔습니다.`);
+        hostRef.current?.broadcast({
+          type: 'player_left',
+          nickname: leaving.nickname,
+        });
+      }
+
+      hostRef.current?.broadcast({
+        type: 'lobby_update',
+        players: next,
+        settings: lobbySettingsRef.current,
+      });
+      setLobbyPlayers(next);
+    },
+    [showTransientStatus],
+  );
 
   const cleanup = useCallback(() => {
     hostRef.current?.destroy();
@@ -222,6 +264,15 @@ export default function LexioOnline() {
     guestRef.current = null;
     gameStateRef.current = null;
   }, []);
+
+  useEffect(
+    () => () => {
+      if (statusClearTimerRef.current) {
+        clearTimeout(statusClearTimerRef.current);
+      }
+    },
+    [],
+  );
 
   useEffect(() => () => cleanup(), [cleanup]);
 
@@ -239,17 +290,7 @@ export default function LexioOnline() {
             /* guest connected */
           });
         },
-        (peerId) => {
-          setLobbyPlayers((prev) => {
-            const next = prev.filter((p) => p.peerId !== peerId);
-            hostRef.current?.broadcast({
-              type: 'lobby_update',
-              players: next,
-              settings: lobbySettings,
-            });
-            return next;
-          });
-        },
+        handleGuestDisconnected,
       );
       hostRef.current = host;
       myPeerIdRef.current = host.myPeerId;
@@ -715,6 +756,12 @@ export default function LexioOnline() {
                   </button>
                 </div>
               </div>
+            )}
+
+            {statusMessage && (
+              <p className="mb-4 text-center text-base text-amber-100/95 bg-amber-950/35 rounded-lg py-2.5 px-4 border border-amber-500/30">
+                {statusMessage}
+              </p>
             )}
 
             {inviteUrl && (
