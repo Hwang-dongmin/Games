@@ -56,6 +56,8 @@ export function layoutHandTiles3D(
     backRowZ?: number;
     /** 두 줄일 때 뒤줄 Y lift */
     backRowY?: number;
+    /** 세운 손패 그룹 X축 기울기 — z 줄 오프셋이 테이블에서 떠 보이지 않게 y 보정 */
+    tableTiltX?: number;
   },
 ): HandTilePlacement[] {
   const {
@@ -64,7 +66,9 @@ export function layoutHandTiles3D(
     frontRowZ = 0.34,
     backRowZ = -0.1,
     backRowY = 0,
+    tableTiltX = 0,
   } = options;
+  const tiltZToY = (z: number) => z * Math.sin(tableTiltX);
   const n = tiles.length;
 
   if (n === 0) return [];
@@ -75,7 +79,11 @@ export function layoutHandTiles3D(
     const total = (n - 1) * gap;
     return tiles.map((tile, i) => ({
       tile,
-      position: [-total / 2 + i * gap, 0, 0],
+      position: [-total / 2 + i * gap, tiltZToY(0), 0] as [
+        number,
+        number,
+        number,
+      ],
       rowLayer: 'single' as const,
     }));
   }
@@ -94,7 +102,7 @@ export function layoutHandTiles3D(
     rowTiles.forEach((tile, i) => {
       placements.push({
         tile,
-        position: [-total / 2 + i * gap, y, z],
+        position: [-total / 2 + i * gap, y + tiltZToY(z), z],
         rowLayer,
       });
     });

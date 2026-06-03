@@ -58,8 +58,10 @@ const TILE_H = TILE_W * CARD_RATIO_H_W;
 const TILE_T = 0.092;
 const FACE_Z = TILE_T / 2 + 0.0015;
 const TABLE_TOP_Y = 0.5;
-const TILE_CENTER_Y = TABLE_TOP_Y + TILE_H / 2;
+const TABLE_SURFACE_EPS = 0.0015;
 const TILT_BACK = -0.18;
+/** 플레이어 손패 — 테이블 가장자리(카메라 쪽) */
+const HAND_TABLE_Z = 1.42;
 /** 판 종료: 패 공개·카메라 탑다운 애니메이션 길이(초) */
 const FINISH_REVEAL_SEC = 2;
 /** 세션 최초 진입: 위에서 시계방향으로 내려오며 1인칭 시점(초) */
@@ -143,6 +145,166 @@ const LEXIO_DISCARD_ROUNDED_GEOM = getRoundedTileGeometry(
   TILE_T,
 );
 
+const _tileBBoxCorner = new THREE.Vector3();
+const _tileWorldMat = new THREE.Matrix4();
+const _tileM1 = new THREE.Matrix4();
+const _tileM2 = new THREE.Matrix4();
+
+type TileOnTableOpts = {
+  groupY: number;
+  groupZ: number;
+  cardYaw?: number;
+  tiltX?: number;
+  tileX?: number;
+  tileY?: number;
+  tileZ?: number;
+};
+
+/** R_y(cardYaw)·T(0,groupY,groupZ)·R_x(tilt)·T(tile) 적용 후 패 바닥 최저 월드 Y */
+function tileBottomMinY(
+  geom: THREE.BufferGeometry,
+  opts: TileOnTableOpts,
+): number {
+  const {
+    groupY,
+    groupZ,
+    cardYaw = 0,
+    tiltX = TILT_BACK,
+    tileX = 0,
+    tileY = 0,
+    tileZ = 0,
+  } = opts;
+  if (!geom.boundingBox) geom.computeBoundingBox();
+  const bb = geom.boundingBox!;
+
+  _tileM1.makeRotationY(cardYaw);
+  _tileM2.makeTranslation(0, groupY, groupZ);
+  _tileWorldMat.copy(_tileM1).multiply(_tileM2);
+  _tileM1.makeRotationX(tiltX);
+  _tileWorldMat.multiply(_tileM1);
+  _tileM1.makeTranslation(tileX, tileY, tileZ);
+  _tileWorldMat.multiply(_tileM1);
+
+  let yMin = Infinity;
+  for (const x of [bb.min.x, bb.max.x]) {
+    for (const y of [bb.min.y, bb.max.y]) {
+      for (const z of [bb.min.z, bb.max.z]) {
+        _tileBBoxCorner.set(x, y, z).applyMatrix4(_tileWorldMat);
+        if (_tileBBoxCorner.y < yMin) yMin = _tileBBoxCorner.y;
+      }
+    }
+  }
+  return yMin;
+}
+
+const TABLE_CONTACT_TARGET = TABLE_TOP_Y + TABLE_SURFACE_EPS;
+
+function solveGroupYOnTable(
+  geom: THREE.BufferGeometry,
+  groupZ: number,
+  cardYaw = 0,
+  tileX = 0,
+  tileY = 0,
+  tileZ = 0,
+): number {
+  let lo = 0.35;
+  let hi = 0.95;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (
+      tileBottomMinY(geom, {
+        groupY: mid,
+        groupZ,
+        cardYaw,
+        tileX,
+        tileY,
+        tileZ,
+      }) > TABLE_CONTACT_TARGET
+    ) {
+      hi = mid;
+    } else {
+      lo = mid;
+    }
+  }
+  return (lo + hi) / 2;
+}
+
+const HAND_GROUP_Y = solveGroupYOnTable(
+  LEXIO_TILE_ROUNDED_GEOM,
+  HAND_TABLE_Z,
+);
+const CENTER_PLAY_GROUP_Y = solveGroupYOnTable(
+  LEXIO_TILE_ROUNDED_GEOM,
+  -0.2,
+);
+/** 테이블에 완전히 눕힌 패(−90°) 그룹 Y */
+const TILE_FLAT_Y =
+  TABLE_TOP_Y -
+  tileBottomMinY(LEXIO_TILE_ROUNDED_GEOM, {
+    groupY: 0,
+    groupZ: 0,
+    tiltX: -Math.PI / 2,
+  }) +
+  TABLE_SURFACE_EPS;
+
+const OPPONENT_BACK_W = TILE_W * 0.6;
+const OPPONENT_BACK_H = TILE_H * 0.6;
+const OPPONENT_HAND_Z = -1.45;
+const OPPONENT_BACK_GEOM = getRoundedTileGeometry(
+  OPPONENT_BACK_W,
+  OPPONENT_BACK_H,
+  TILE_T,
+);
+
+function opponentHandGroupY(cardYaw: number): number {
+  return solveGroupYOnTable(
+    OPPONENT_BACK_GEOM,
+    OPPONENT_HAND_Z,
+    cardYaw,
+  );
+}
+
+/** 세운 패 — 그룹 내 (x,y,z) 배치 후에도 바닥 높이 동일 */
+function tileLocalWithTableContact(
+  layoutX: number,
+  layoutY: number,
+  layoutZ: number,
+  geom: THREE.BufferGeometry = LEXIO_TILE_ROUNDED_GEOM,
+  tableOpts: TileOnTableOpts = {
+    groupY: HAND_GROUP_Y,
+    groupZ: HAND_TABLE_Z,
+  },
+): [number, number, number] {
+  const ref = tileBottomMinY(geom, {
+    ...tableOpts,
+    tileX: 0,
+    tileY: 0,
+    tileZ: 0,
+  });
+  if (Math.abs(layoutY) < 0.0005 && Math.abs(layoutZ) < 0.0005) {
+    return [layoutX, 0, 0];
+  }
+  let yLo = -0.4;
+  let yHi = 0.4;
+  for (let i = 0; i < 22; i++) {
+    const mid = (yLo + yHi) / 2;
+    const testY = layoutY + mid;
+    if (
+      tileBottomMinY(geom, {
+        ...tableOpts,
+        tileX: 0,
+        tileY: testY,
+        tileZ: layoutZ,
+      }) > ref
+    ) {
+      yHi = mid;
+    } else {
+      yLo = mid;
+    }
+  }
+  return [layoutX, layoutY + (yLo + yHi) / 2, layoutZ];
+}
+
 const TILE_RENDER_ORDER: Record<'back' | 'single' | 'front', number> = {
   back: 0,
   single: 4,
@@ -173,6 +335,7 @@ function LexioTile3D({
   finishReveal = false,
   rowLayer = 'single',
   faceMode = 'html',
+  liftAxis = 'y',
 }: {
   tile: LexioTile;
   position: [number, number, number];
@@ -188,6 +351,8 @@ function LexioTile3D({
   rowLayer?: 'back' | 'single' | 'front';
   /** mesh: WebGL plane 앞면(depth 정렬) / html: DOM Html 오버레이 */
   faceMode?: 'html' | 'mesh';
+  /** 호버·선택 lift 축 (기본 Y) */
+  liftAxis?: 'y' | 'z';
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const liftSmoothed = useRef(0);
@@ -210,11 +375,20 @@ function LexioTile3D({
     if (!groupRef.current) return;
     const t = 1 - Math.exp(-14 * delta);
     liftSmoothed.current += (targetLift - liftSmoothed.current) * t;
-    groupRef.current.position.set(
-      position[0],
-      position[1] + liftSmoothed.current,
-      position[2],
-    );
+    const lift = liftSmoothed.current;
+    if (liftAxis === 'z') {
+      groupRef.current.position.set(
+        position[0],
+        position[1],
+        position[2] + lift,
+      );
+    } else {
+      groupRef.current.position.set(
+        position[0],
+        position[1] + lift,
+        position[2],
+      );
+    }
   });
 
   const showFaceHover = facePointerHover;
@@ -517,7 +691,12 @@ function OpponentRevealAnimated({
   const revealTotal = Math.max(0, (tiles.length - 1) * revealGap);
 
   const pStart = useMemo(() => {
-    const p = new THREE.Vector3(0, TILE_CENTER_Y, -1.45);
+    const y = solveGroupYOnTable(
+      LEXIO_TILE_ROUNDED_GEOM,
+      OPPONENT_HAND_Z,
+      cardYaw,
+    );
+    const p = new THREE.Vector3(0, y, OPPONENT_HAND_Z);
     return p.applyAxisAngle(_axisY, cardYaw);
   }, [cardYaw]);
 
@@ -600,7 +779,11 @@ function HumanRevealAnimated({
   const tileIds = tiles.map((t) => t.id).join(',');
   const gap = TILE_W * 1.1;
   const hud = finishHud ?? { handCount: tiles.length, roundEarned: 0 };
-  const placements = layoutHandTiles3D(tiles, { narrow, gap });
+  const placements = layoutHandTiles3D(tiles, {
+    narrow,
+    gap,
+    tableTiltX: TILT_BACK,
+  });
   const maxX = placements.reduce(
     (m, p) => Math.max(m, Math.abs(p.position[0])),
     0,
@@ -608,11 +791,11 @@ function HumanRevealAnimated({
   const total = maxX * 2 + TILE_W;
 
   const pStart = useMemo(
-    () => new THREE.Vector3(0, TILE_CENTER_Y, 1.42),
+    () => new THREE.Vector3(0, HAND_GROUP_Y, HAND_TABLE_Z),
     [],
   );
   const pEnd = useMemo(
-    () => new THREE.Vector3(0, TABLE_TOP_Y + TILE_T / 2 + 0.0015, 1.46),
+    () => new THREE.Vector3(0, TILE_FLAT_Y, 1.46),
     [],
   );
   const qStart = useMemo(
@@ -700,6 +883,10 @@ function OpponentSeat({
   const backCount = Math.min(handCount, 14);
   const backGap = TILE_W * 0.78;
   const backTotal = (backCount - 1) * backGap;
+  const opponentHandY = useMemo(
+    () => opponentHandGroupY(cardYaw),
+    [cardYaw],
+  );
 
   // 좌석 그룹은 회전 없이 seatPosition에 놓여 있으므로,
   // 공개된 카드의 로컬 오프셋이 곧 (월드 위치 - seatPosition)이 된다.
@@ -707,7 +894,7 @@ function OpponentSeat({
   const layoutDistance = 1.15;
   const revealOffset: [number, number, number] = [
     -layoutDistance * Math.sin(cardYaw),
-    TABLE_TOP_Y + TILE_T / 2 + 0.0015 - seatPosition[1],
+    TILE_FLAT_Y - seatPosition[1],
     -layoutDistance * Math.cos(cardYaw),
   ];
 
@@ -789,7 +976,7 @@ function OpponentSeat({
         // 진행 중: 좌석에서 테이블 안쪽으로 옮긴 위치(플레이어에 더 가깝게), 테이블 위에 일렬로 세움
         <group rotation={[0, cardYaw, 0]}>
           <group
-            position={[0, TILE_CENTER_Y, -1.45]}
+            position={[0, opponentHandY, OPPONENT_HAND_Z]}
             rotation={[TILT_BACK, 0, 0]}
           >
             {Array.from({ length: backCount }).map((_, i) => (
@@ -845,7 +1032,7 @@ function CenterPlay3D({
   if (flatOnTable) {
     return (
       <group
-        position={[0, TABLE_TOP_Y + TILE_T / 2 + 0.0015, -0.2]}
+        position={[0, TILE_FLAT_Y, -0.2]}
         rotation={[-Math.PI / 2, 0, 0]}
       >
         {combo.tiles.map((t, i) => (
@@ -856,6 +1043,7 @@ function CenterPlay3D({
             rotation={[0, 0, 0]}
             dimmed={false}
             facePointerHover={false}
+            faceMode="mesh"
             finishReveal
           />
         ))}
@@ -864,7 +1052,10 @@ function CenterPlay3D({
   }
 
   return (
-    <group position={[0, TILE_CENTER_Y, -0.2]} rotation={[TILT_BACK, 0, 0]}>
+    <group
+      position={[0, CENTER_PLAY_GROUP_Y, -0.2]}
+      rotation={[TILT_BACK, 0, 0]}
+    >
       {combo.tiles.map((t, i) => (
         <LexioTile3D
           key={t.id}
@@ -872,6 +1063,7 @@ function CenterPlay3D({
           position={[-total / 2 + i * gap, 0, 0]}
           rotation={[0, 0, 0]}
           dimmed={false}
+          faceMode="mesh"
         />
       ))}
     </group>
@@ -919,11 +1111,16 @@ function HandRow3D({
 
   const renderPlacement = (p: (typeof placements)[number]) => {
     const selected = selectedIds.includes(p.tile.id);
+    const localPos = tileLocalWithTableContact(
+      p.position[0],
+      p.position[1],
+      p.position[2],
+    );
     return (
       <LexioTile3D
         key={p.tile.id}
         tile={p.tile}
-        position={p.position}
+        position={localPos}
         rotation={[0, 0, 0]}
         selected={selected}
         rowLayer={p.rowLayer}
@@ -934,7 +1131,7 @@ function HandRow3D({
   };
 
   return (
-    <group position={[0, TILE_CENTER_Y, 1.5]} rotation={[TILT_BACK, 0, 0]}>
+    <group position={[0, HAND_GROUP_Y, HAND_TABLE_Z]} rotation={[TILT_BACK, 0, 0]}>
       {backPlacements.length > 0 && (
         <group renderOrder={0}>
           {backPlacements.map((p) => renderPlacement(p))}
@@ -1043,7 +1240,7 @@ function SceneContent({
         intensity={0.42}
         color="#ede9fe"
       >
-        <object3D attach="target" position={[0, TILE_CENTER_Y, 1.5]} />
+        <object3D attach="target" position={[0, HAND_GROUP_Y, HAND_TABLE_Z]} />
       </directionalLight>
       <pointLight position={[0, 5.5, 3.2]} intensity={0.14} color="#c4b5fd" />
 
