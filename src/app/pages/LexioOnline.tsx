@@ -61,11 +61,40 @@ import {
   type LobbySettings,
   type WireMessage,
 } from '../utils/lexioMultiplayer';
+import { setLexioBgmMode, stopLexioBgm } from '../utils/lexioBgm';
+import {
+  playLexioSound,
+  reactLexioGameViewSounds,
+  unlockLexioAudio,
+} from '../utils/lexioSounds';
+import LexioSfxToggle from '../components/lexio/LexioSfxToggle';
 
 type Screen = 'entry' | 'lobby' | 'game';
 
+const LEXIO_NICKNAME_KEY = 'lexio-online-nickname';
+
 const DEFAULT_NICK = () =>
   `플레이어${Math.floor(100 + Math.random() * 900)}`;
+
+function loadStoredNickname(): string {
+  try {
+    const saved = window.localStorage.getItem(LEXIO_NICKNAME_KEY)?.trim();
+    if (saved) return saved.slice(0, 16);
+  } catch {
+    /* ignore */
+  }
+  return DEFAULT_NICK();
+}
+
+function persistNickname(value: string): void {
+  const trimmed = value.trim();
+  if (!trimmed) return;
+  try {
+    window.localStorage.setItem(LEXIO_NICKNAME_KEY, trimmed.slice(0, 16));
+  } catch {
+    /* ignore */
+  }
+}
 
 function playerLeftMessage(nickname: string, replacedByAi: boolean): string {
   if (replacedByAi) {
@@ -79,7 +108,11 @@ export default function LexioOnline() {
   const roomFromUrl = searchParams.get('room')?.trim() ?? '';
 
   const [screen, setScreen] = useState<Screen>('entry');
-  const [nickname, setNickname] = useState(DEFAULT_NICK);
+  const [nickname, setNickname] = useState(loadStoredNickname);
+
+  useEffect(() => {
+    persistNickname(nickname);
+  }, [nickname]);
   const [joinCode, setJoinCode] = useState(roomFromUrl);
   const [isHost, setIsHost] = useState(false);
   const [roomId, setRoomId] = useState('');
@@ -111,6 +144,8 @@ export default function LexioOnline() {
   const statusClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  const prevGameViewRef = useRef<ClientGameView | null>(null);
+  const pendingLocalActionRef = useRef<'play' | 'pass' | null>(null);
 
   const showTransientStatus = useCallback((message: string) => {
     if (statusClearTimerRef.current) {
@@ -235,6 +270,7 @@ export default function LexioOnline() {
         break;
       case 'error':
         setStatusMessage(msg.message);
+        playLexioSound('invalid');
         break;
       case 'host_left':
         setConnectionStatus('error');
@@ -527,6 +563,8 @@ export default function LexioOnline() {
 
   const handlePlay = () => {
     if (!canPlay) return;
+    pendingLocalActionRef.current = 'play';
+    playLexioSound('play', { tileCount: selectedTiles.length });
     sendAction('play', selectedTiles.map((t) => t.id));
     setSelectedIds([]);
   };
@@ -534,8 +572,11 @@ export default function LexioOnline() {
   const handlePass = () => {
     if (!gameView?.currentPlay) {
       setStatusMessage('리드 차례에는 패스할 수 없습니다.');
+      playLexioSound('invalid');
       return;
     }
+    pendingLocalActionRef.current = 'pass';
+    playLexioSound('pass');
     sendAction('pass');
     setSelectedIds([]);
   };
@@ -643,12 +684,47 @@ export default function LexioOnline() {
 
   const toggleSelect = (tileId: number) => {
     if (!gameReady) return;
-    setSelectedIds((prev) =>
-      prev.includes(tileId)
+    setSelectedIds((prev) => {
+      const deselecting = prev.includes(tileId);
+      playLexioSound(deselecting ? 'tileDeselect' : 'tileSelect');
+      return deselecting
         ? prev.filter((id) => id !== tileId)
-        : [...prev, tileId],
-    );
+        : [...prev, tileId];
+    });
   };
+
+  useEffect(() => {
+    const onPointerDown = () => {
+      unlockLexioAudio();
+      const inFinishedRound =
+        screen === 'game' && gameView?.phase === 'finished';
+      setLexioBgmMode(inFinishedRound ? 'finished' : 'playing');
+    };
+    window.addEventListener('pointerdown', onPointerDown, { once: true });
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [screen, gameView?.phase]);
+
+  useEffect(() => {
+    const mode =
+      screen === 'game' && gameView?.phase === 'finished'
+        ? 'finished'
+        : 'playing';
+    setLexioBgmMode(mode);
+    return () => stopLexioBgm();
+  }, [screen, gameView?.phase]);
+
+  useEffect(() => {
+    if (!gameView) {
+      prevGameViewRef.current = null;
+      return;
+    }
+    reactLexioGameViewSounds(prevGameViewRef.current, gameView, {
+      skipPlay: pendingLocalActionRef.current === 'play',
+      skipPass: pendingLocalActionRef.current === 'pass',
+    });
+    pendingLocalActionRef.current = null;
+    prevGameViewRef.current = gameView;
+  }, [gameView]);
 
   return (
     <div
@@ -736,6 +812,7 @@ export default function LexioOnline() {
         )}
 
         {screen === 'entry' && connectionStatus !== 'connecting' && (
+          <>
           <div className="grid gap-6 md:grid-cols-2">
             <section
               className="rounded-2xl p-6 border border-purple-500/30"
@@ -841,6 +918,10 @@ export default function LexioOnline() {
               </button>
             </section>
           </div>
+          <div className="mx-auto mt-4 max-w-lg px-1">
+            <LexioSfxToggle className="col-span-1" />
+          </div>
+          </>
         )}
 
         {screen === 'lobby' && (

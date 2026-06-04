@@ -14,6 +14,7 @@ import {
   Users,
   Settings,
   ChevronLeft,
+  ChevronRight,
   Crown,
 } from 'lucide-react';
 import {
@@ -41,6 +42,12 @@ import {
   buildDiscardPlacements,
   type DiscardPlacement,
 } from '../utils/lexioDiscardLayout';
+import { setLexioBgmMode, stopLexioBgm } from '../utils/lexioBgm';
+import {
+  playLexioSound,
+  unlockLexioAudio,
+} from '../utils/lexioSounds';
+import LexioSfxToggle from '../components/lexio/LexioSfxToggle';
 
 type GamePhase = 'setup' | 'playing' | 'finished';
 type UiPlayer = LexioPlayer;
@@ -179,6 +186,7 @@ export default function Lexio() {
   const [lastRoundCoinRows, setLastRoundCoinRows] = useState<
     LastRoundCoinRow[]
   >([]);
+  const wasHumanTurnRef = useRef(false);
 
   const humanPlayer = players.find((p) => !p.isAI);
 
@@ -209,6 +217,7 @@ export default function Lexio() {
     setDiscardPlacements([]);
     setDiscardedTiles([]);
     setMessage('');
+    playLexioSound('deal');
   }, [offlineAiCount]);
 
   /** 첫 화면에서 판 수 정한 뒤 세션 시작 */
@@ -240,6 +249,7 @@ export default function Lexio() {
     setDiscardPlacements([]);
     setDiscardedTiles([]);
     setMessage('');
+    playLexioSound('deal');
   }, [pendingSessionRounds, pendingAiCount, pendingAiDifficulty]);
 
   const resetSessionToSetup = useCallback(() => {
@@ -292,6 +302,7 @@ export default function Lexio() {
           return next;
         });
         setSessionCompletedRounds((c) => c + 1);
+        playLexioSound('victory');
 
         return true;
       }
@@ -327,6 +338,7 @@ export default function Lexio() {
         setTrickStarterIdx(null);
         setCurrentPlayerIdx(next);
         setMessage('');
+        playLexioSound('trickClear');
         return;
       }
 
@@ -359,6 +371,7 @@ export default function Lexio() {
       setCurrentPlay(combo);
       setTrickStarterIdx(playerIdx);
       setLastPlayedByIdx(playerIdx);
+      playLexioSound('play', { tileCount: tiles.length });
 
       if (checkWinner(updated, playerIdx)) return true;
 
@@ -376,6 +389,7 @@ export default function Lexio() {
         idx === playerIdx ? { ...p, passed: true } : p,
       );
       setPlayers(updated);
+      playLexioSound('pass');
       advanceTurn(updated, trickStarterIdx, currentPlay, playerIdx);
       return true;
     },
@@ -389,6 +403,7 @@ export default function Lexio() {
     if (currentPlayerIdx !== humanIdx) return;
     if (selectedTiles.length === 0) {
       setMessage('타일을 선택해주세요.');
+      playLexioSound('invalid');
       return;
     }
     const ok = doPlay(humanIdx, selectedTiles);
@@ -396,9 +411,11 @@ export default function Lexio() {
       const combo = detectCombo(selectedTiles);
       if (!combo && selectedTiles.length > 0) {
         setMessage('유효하지 않은 조합입니다.');
+        playLexioSound('invalid');
         return;
       }
       setMessage('유효하지 않은 조합이거나 현재 조합을 이기지 못합니다.');
+      playLexioSound('invalid');
       return;
     }
     setSelectedIds([]);
@@ -409,6 +426,7 @@ export default function Lexio() {
     if (currentPlayerIdx !== humanIdx) return;
     if (!currentPlay) {
       setMessage('리드 차례에는 패스할 수 없습니다.');
+      playLexioSound('invalid');
       return;
     }
     doPass(humanIdx);
@@ -416,11 +434,13 @@ export default function Lexio() {
   };
 
   const toggleSelect = (tileId: number) => {
-    setSelectedIds((prev) =>
-      prev.includes(tileId)
+    setSelectedIds((prev) => {
+      const deselecting = prev.includes(tileId);
+      playLexioSound(deselecting ? 'tileDeselect' : 'tileSelect');
+      return deselecting
         ? prev.filter((id) => id !== tileId)
-        : [...prev, tileId],
-    );
+        : [...prev, tileId];
+    });
   };
 
   // 새로고침 복원
@@ -598,6 +618,27 @@ export default function Lexio() {
       : 0;
   const isHumanTurn = humanIdx === currentPlayerIdx && phase === 'playing';
 
+  useEffect(() => {
+    const onPointerDown = () => {
+      unlockLexioAudio();
+      setLexioBgmMode(phase === 'finished' ? 'finished' : 'playing');
+    };
+    window.addEventListener('pointerdown', onPointerDown, { once: true });
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [phase]);
+
+  useEffect(() => {
+    setLexioBgmMode(phase === 'finished' ? 'finished' : 'playing');
+    return () => stopLexioBgm();
+  }, [phase]);
+
+  useEffect(() => {
+    if (isHumanTurn && !wasHumanTurnRef.current) {
+      playLexioSound('turnStart');
+    }
+    wasHumanTurnRef.current = isHumanTurn;
+  }, [isHumanTurn]);
+
   const canHumanPlay =
     isHumanTurn &&
     selectedCombo !== null &&
@@ -732,25 +773,23 @@ export default function Lexio() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="lexio-modal-title"
-            className={`lexio-rules-panel lexio-menu-dialog relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden rounded-2xl shadow-2xl${
+            className={`lexio-menu-dialog relative z-10 flex max-h-[88vh] w-full flex-col overflow-hidden rounded-xl border border-purple-500/25 bg-[#13111f] shadow-[0_20px_50px_rgba(0,0,0,0.55)]${
               lexioMenuClosing ? ' lexio-menu-closing' : ''
-            } ${lexioModalView === 'home' ? 'max-w-md' : 'max-w-3xl'}`}
-            style={{
-              background:
-                'linear-gradient(180deg, #1e1b4b 0%, #0a0a23 100%)',
-              boxShadow:
-                '0 0 0 1px rgba(168,85,247,0.4), 0 30px 60px -20px rgba(0,0,0,0.8)',
-            }}
+            } ${
+              lexioModalView === 'rules'
+                ? 'lexio-rules-panel max-w-3xl'
+                : lexioModalView === 'newGame'
+                  ? 'max-w-md'
+                  : 'max-w-sm'
+            }`}
+            style={
+              lexioModalView === 'rules'
+                ? ({ '--lexio-rules-fade-top': '2.75rem' } as React.CSSProperties)
+                : undefined
+            }
           >
-            <div
-              className="flex shrink-0 items-center justify-between gap-3 p-5 backdrop-blur-md sm:p-6"
-              style={{
-                background:
-                  'linear-gradient(180deg, rgba(30,27,75,0.95) 0%, rgba(30,27,75,0.85) 100%)',
-                borderBottom: '1px solid rgba(168,85,247,0.3)',
-              }}
-            >
-              <div className="flex min-w-0 flex-1 items-center gap-3">
+            <div className="relative flex h-11 shrink-0 items-center border-b border-white/10 px-3 sm:h-12 sm:px-4">
+              <div className="flex w-9 shrink-0 items-center justify-start">
                 {lexioModalView !== 'home' && (
                   <button
                     type="button"
@@ -761,77 +800,81 @@ export default function Lexio() {
                         setLexioModalView('home');
                       }
                     }}
-                    className="shrink-0 rounded-full p-1.5 text-slate-300/80 transition-colors hover:bg-white/[0.08] hover:text-purple-200"
+                    className="rounded-full p-1 text-slate-300/80 transition-colors hover:bg-white/[0.08] hover:text-purple-200"
                     aria-label={
                       phase === 'setup' && lexioModalView === 'rules'
                         ? '닫기'
-                        : '옵션으로 돌아가기'
+                        : '설정으로 돌아가기'
                     }
                   >
-                    <ChevronLeft className="h-5 w-5" />
+                    <ChevronLeft className="h-4 w-4" />
                   </button>
                 )}
-                <div className="min-w-0">
-                  <p className="mb-1 text-[10px] uppercase tracking-[0.4em] text-purple-300/80">
-                    {lexioModalView === 'home'
-                      ? 'Options'
-                      : lexioModalView === 'rules'
-                        ? 'Guide'
-                        : 'Game'}
-                  </p>
-                  <h2
-                    id="lexio-modal-title"
-                    className="flex items-center gap-2.5 font-serif text-lg tracking-wide text-purple-100 sm:text-2xl"
-                  >
-                    {lexioModalView === 'home' && (
-                      <>
-                        <Settings className="h-5 w-5 shrink-0 text-purple-300/80" />
-                        옵션
-                      </>
-                    )}
-                    {lexioModalView === 'rules' && (
-                      <>
-                        <BookOpen className="h-5 w-5 shrink-0 text-purple-300/80" />
-                        렉시오 게임 규칙
-                      </>
-                    )}
-                    {lexioModalView === 'newGame' && (
-                      <>
-                        <RotateCcw className="h-5 w-5 shrink-0 text-purple-300/80" />
-                        새 게임
-                      </>
-                    )}
-                  </h2>
-                </div>
               </div>
+              <h2
+                id="lexio-modal-title"
+                className="pointer-events-none absolute left-1/2 -translate-x-1/2 text-sm font-semibold tracking-wide text-purple-50"
+              >
+                {lexioModalView === 'home' && '설정'}
+                {lexioModalView === 'rules' && '규칙'}
+                {lexioModalView === 'newGame' && '새 게임'}
+              </h2>
               <button
                 type="button"
                 onClick={closeLexioMenu}
-                className="shrink-0 rounded-full p-1.5 text-slate-300/70 transition-colors hover:bg-white/[0.05] hover:text-purple-200"
+                className="ml-auto shrink-0 rounded-full p-1 text-slate-300/70 transition-colors hover:bg-white/[0.05] hover:text-purple-200"
                 aria-label="닫기"
               >
-                <X className="h-5 w-5" />
+                <X className="h-4 w-4" />
               </button>
             </div>
 
             {lexioModalView === 'home' && (
-              <div className="grid grid-cols-2 gap-3 p-5 sm:gap-4 sm:p-6">
+              <div className="flex flex-col gap-1 p-3 sm:p-4">
                 <button
                   type="button"
                   onClick={() => setLexioModalView('rules')}
-                  className="flex min-h-[5.5rem] w-full flex-col items-center justify-center gap-2 rounded-2xl bg-white/[0.06] px-3 py-4 text-center text-sm font-semibold leading-snug tracking-wide text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.45)] transition-colors duration-200 hover:bg-white/[0.12] hover:text-white hover:shadow-[inset_0_0_0_1px_rgba(168,85,247,0.7)] sm:min-h-[6.25rem] sm:px-4"
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-white/[0.06]"
                 >
-                  <BookOpen className="h-5 w-5 shrink-0 sm:h-6 sm:w-6" />
-                  게임 규칙
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-500/15 text-purple-200">
+                    <BookOpen className="h-4 w-4" aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-purple-50">
+                      게임 규칙
+                    </span>
+                    <span className="block text-xs text-purple-300/55">
+                      조합 · 점수 안내
+                    </span>
+                  </span>
+                  <ChevronRight
+                    className="h-4 w-4 shrink-0 text-purple-400/50"
+                    aria-hidden
+                  />
                 </button>
                 <button
                   type="button"
                   onClick={() => setLexioModalView('newGame')}
-                  className="flex min-h-[5.5rem] w-full flex-col items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-purple-500/45 to-violet-800/55 px-3 py-4 text-center text-sm font-semibold leading-snug tracking-wide text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.7),0_8px_20px_-10px_rgba(168,85,247,0.45)] transition-colors duration-200 hover:from-purple-400/55 hover:to-violet-700/65 hover:text-white sm:min-h-[6.25rem] sm:px-4"
+                  className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-white/[0.06]"
                 >
-                  <RotateCcw className="h-5 w-5 shrink-0 sm:h-6 sm:w-6" />
-                  새 게임
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-500/15 text-purple-200">
+                    <RotateCcw className="h-4 w-4" aria-hidden />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-purple-50">
+                      새 게임
+                    </span>
+                    <span className="block text-xs text-purple-300/55">
+                      세션 초기화 · 다시 시작
+                    </span>
+                  </span>
+                  <ChevronRight
+                    className="h-4 w-4 shrink-0 text-purple-400/50"
+                    aria-hidden
+                  />
                 </button>
+                <div className="my-1 border-t border-white/10" />
+                <LexioSfxToggle />
               </div>
             )}
 
@@ -848,68 +891,75 @@ export default function Lexio() {
             )}
 
             {lexioModalView === 'newGame' && (
-            <div
-              className="shrink-0 space-y-3 border-t p-5 backdrop-blur-md sm:p-6"
-              style={{
-                borderColor: 'rgba(168,85,247,0.25)',
-                background:
-                  'linear-gradient(0deg, rgba(10,10,35,0.98) 0%, rgba(30,27,75,0.92) 100%)',
-              }}
-            >
-              {phase === 'playing' ? (
-                <>
-                  <p className="text-center text-sm leading-relaxed text-purple-100/80">
-                    정말로 새 게임을 시작하시겠습니까?
-                    <br />
-                    <span className="text-purple-100/50">
-                      진행 중인 판·세션 코인이 초기화되며 처음 화면으로
-                      돌아갑니다.
-                    </span>
-                  </p>
-                  <div className="flex gap-3">
+              <div className="shrink-0 px-5 py-6 sm:px-6 sm:py-7">
+                {phase === 'playing' ? (
+                  <div className="flex flex-col">
+                    <div className="mb-6 text-center">
+                      <p className="text-lg font-semibold tracking-tight text-purple-50 sm:text-xl">
+                        새 게임을 시작할까요?
+                      </p>
+                      <p className="mx-auto mt-3 max-w-[20rem] text-[15px] leading-relaxed text-purple-200/80 sm:text-base">
+                        진행상황이 모두 초기화되고, 설정 화면으로
+                        돌아갑니다.
+                      </p>
+                    </div>
+                    <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                      <button
+                        type="button"
+                        onClick={closeLexioMenu}
+                        className="flex-1 rounded-xl border border-white/15 bg-white/[0.05] px-4 py-3.5 text-[15px] font-medium text-purple-100 transition-colors hover:bg-white/[0.1] sm:text-base"
+                      >
+                        취소
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          closeLexioMenu();
+                          resetSessionToSetup();
+                        }}
+                        className="flex-1 rounded-xl bg-purple-600 px-4 py-3.5 text-[15px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(147,51,234,0.65)] transition-colors hover:bg-purple-500 sm:text-base"
+                      >
+                        새 게임 시작
+                      </button>
+                    </div>
+                  </div>
+                ) : phase === 'setup' ? (
+                  <div className="flex flex-col gap-5 text-center">
+                    <p className="text-[15px] leading-relaxed text-purple-200/80 sm:text-base">
+                      선택한 인원·난이도로 세션을 시작합니다.
+                    </p>
                     <button
                       type="button"
-                      onClick={closeLexioMenu}
-                      className="flex-1 rounded-full bg-white/[0.04] px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-200 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.15)] transition-colors duration-200 hover:bg-white/10 hover:text-white"
+                      onClick={() => {
+                        closeLexioMenu();
+                        beginNewSessionFromSetup();
+                      }}
+                      className="w-full rounded-xl bg-purple-600 px-4 py-3.5 text-[15px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(147,51,234,0.65)] transition-colors hover:bg-purple-500 sm:text-base"
                     >
-                      취소
+                      게임 시작
                     </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-5 text-center">
+                    <p className="text-lg font-semibold text-purple-50 sm:text-xl">
+                      설정 화면으로 돌아갈까요?
+                    </p>
+                    <p className="text-[15px] leading-relaxed text-purple-200/80 sm:text-base">
+                      세션을 마치고 새 게임을 준비합니다.
+                    </p>
                     <button
                       type="button"
                       onClick={() => {
                         closeLexioMenu();
                         resetSessionToSetup();
                       }}
-                      className="flex-1 rounded-full bg-gradient-to-b from-purple-500/40 to-violet-800/50 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.65),0_8px_20px_-10px_rgba(168,85,247,0.5)] transition-colors duration-200 hover:from-purple-400/50 hover:to-violet-700/60 hover:text-white"
+                      className="w-full rounded-xl bg-purple-600 px-4 py-3.5 text-[15px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(147,51,234,0.65)] transition-colors hover:bg-purple-500 sm:text-base"
                     >
-                      확인
+                      새 게임
                     </button>
                   </div>
-                </>
-              ) : phase === 'setup' ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    closeLexioMenu();
-                    beginNewSessionFromSetup();
-                  }}
-                  className="w-full rounded-full bg-gradient-to-b from-purple-500/40 to-violet-800/50 px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.65),0_8px_20px_-10px_rgba(168,85,247,0.5)] transition-colors duration-200 hover:from-purple-400/50 hover:to-violet-700/60 hover:text-white"
-                >
-                  게임 시작
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    closeLexioMenu();
-                    resetSessionToSetup();
-                  }}
-                  className="w-full rounded-full bg-white/[0.06] px-6 py-3 text-xs font-semibold uppercase tracking-[0.3em] text-slate-200 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.18)] transition-colors duration-200 hover:bg-white/10 hover:text-white"
-                >
-                  처음 화면으로
-                </button>
-              )}
-            </div>
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -987,11 +1037,10 @@ export default function Lexio() {
               <button
                 type="button"
                 onClick={openLexioOptions}
-                className="inline-flex items-center gap-2 rounded-full bg-gradient-to-b from-purple-500/35 to-violet-800/45 px-3 py-2 text-xs font-semibold tracking-[0.25em] text-purple-100 shadow-[inset_0_0_0_1px_rgba(168,85,247,0.55),0_8px_20px_-10px_rgba(168,85,247,0.45)] transition-colors duration-200 hover:from-purple-400/45 hover:to-violet-700/55 hover:text-white sm:px-4"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-purple-200/80 transition-colors hover:bg-white/[0.06] hover:text-purple-50 sm:h-10 sm:w-10"
                 aria-label="옵션"
               >
                 <Settings className="h-4 w-4 shrink-0 sm:h-[18px] sm:w-[18px]" />
-                <span className="hidden sm:inline">옵션</span>
               </button>
             </div>
           </div>
@@ -1131,7 +1180,7 @@ export default function Lexio() {
                             boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.22)',
                           }}
                         >
-                          처음으로
+                          새 게임
                         </button>
                       )}
                     </div>
