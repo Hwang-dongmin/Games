@@ -1,7 +1,7 @@
 ---
 description: >-
   Git commit when the user asks (커밋해줘, 커밋, commit, git commit). English
-  subject line; Korean commit body and detailed summary. Stage only files from
+  subject line; optional short Korean body (key changes only). Stage only files from
   the current agent session. Follow the git-commit skill.
 alwaysApply: false
 ---
@@ -11,7 +11,7 @@ alwaysApply: false
 When the user asks to commit (e.g. **커밋해줘**):
 
 1. Follow the **git-commit** skill (`.cursor/skills/git-commit/SKILL.md`).
-2. **Subject in English**; **body & summary in Korean bullet list** (짧고 쉬운 말, `습니다` X).
+2. **제목(English)** + **선택 본문** — 본문 1~2줄, 화면·기능 + 핵심만. 모호한 말·파일 나열 금지.
 3. **Current agent only:** stage and commit only paths changed in **this** chat (Write / StrReplace / Delete / EditNotebook / your shell edits). Do **not** `git add .` or `git add -A` because other agents left dirty files. Use `git add <path>` per session file; leave other sessions’ changes unstaged.
 4. Basic rules: explicit request only, `git status` + `git diff` + `git log` first, no secrets, no destructive git unless asked.
 5. If session scope is unclear or a file mixes your edits with another agent’s, ask the user or use `git add -p` for your hunks only — never commit the other agent’s work.
