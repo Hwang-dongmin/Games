@@ -1,4 +1,9 @@
 import { useEffect, useRef } from 'react';
+import {
+  playLexioFireworkExplosion,
+  playLexioFireworkLaunch,
+  unlockLexioAudio,
+} from '../../utils/lexioSounds';
 
 const COLORS = [
   '#ff6b6b',
@@ -66,13 +71,15 @@ export default function LexioVictoryFireworks({ active }: LexioVictoryFireworksP
   useEffect(() => {
     if (!active) return;
 
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
     const prefersReducedMotion = window.matchMedia(
       '(prefers-reduced-motion: reduce)',
     ).matches;
     if (prefersReducedMotion) return;
+
+    unlockLexioAudio();
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -111,6 +118,7 @@ export default function LexioVictoryFireworks({ active }: LexioVictoryFireworksP
         targetY: height * (0.15 + Math.random() * 0.35),
         color: randomColor(),
       });
+      playLexioFireworkLaunch();
     };
 
     launchRocket();
@@ -163,6 +171,7 @@ export default function LexioVictoryFireworks({ active }: LexioVictoryFireworksP
           particles.push(
             ...spawnExplosion(r.x, r.y, r.color, 48 + Math.floor(Math.random() * 24)),
           );
+          playLexioFireworkExplosion();
           rockets.splice(i, 1);
         }
       }
