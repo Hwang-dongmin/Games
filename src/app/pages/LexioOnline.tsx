@@ -15,6 +15,7 @@ import {
   Loader2,
   Link2,
   Crown,
+  BookOpen,
 } from 'lucide-react';
 import {
   Select,
@@ -25,6 +26,7 @@ import {
 } from '../components/ui/select';
 import LexioFirstPersonScene from './lexio/LexioFirstPersonScene';
 import LexioOnlineWelcomeOverlay from './lexio/LexioOnlineWelcomeOverlay';
+import LexioRulesModal from './lexio/LexioRulesModal';
 import LexioSessionRankingPanel from './lexio/LexioSessionRankingPanel';
 import { beats, comboKorean, detectCombo, aiFindMove, aiLeadFallbackTile } from '../utils/lexio';
 import {
@@ -96,6 +98,7 @@ export default function LexioOnline() {
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
+  const [showRules, setShowRules] = useState(false);
 
   const hostRef = useRef<LexioHostRoom | null>(null);
   const guestRef = useRef<LexioGuestRoom | null>(null);
@@ -622,6 +625,15 @@ export default function LexioOnline() {
   const showWelcomeOverlay =
     gameView?.phase === 'playing' && (!gameReady || welcomeLeaving);
 
+  const rulesPlayerCount = useMemo(() => {
+    if (screen === 'game' && gameView) return gameView.players.length;
+    if (screen === 'lobby' && lobbyPlayers.length >= MIN_ONLINE_PLAYERS) {
+      return lobbyPlayers.length;
+    }
+    if (screen === 'lobby') return lobbySettings.maxPlayers;
+    return undefined;
+  }, [screen, gameView, lobbyPlayers.length, lobbySettings.maxPlayers]);
+
   useEffect(() => {
     if (!gameIntroDone) return;
     setWelcomeLeaving(true);
@@ -691,8 +703,24 @@ export default function LexioOnline() {
               </p>
             )}
           </div>
-          <div className="w-[5.5rem] shrink-0" aria-hidden />
+          <button
+            type="button"
+            onClick={() => setShowRules(true)}
+            className="inline-flex shrink-0 items-center gap-2 rounded-full bg-white/5 px-3 py-2.5 text-sm font-semibold uppercase tracking-widest text-purple-100 border border-purple-500/30 hover:bg-white/10 sm:px-4"
+            aria-label="게임 규칙 보기"
+          >
+            <BookOpen className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">게임 규칙</span>
+          </button>
         </header>
+
+        <LexioRulesModal
+          open={showRules}
+          onClose={() => setShowRules(false)}
+          mode="online"
+          playerCount={rulesPlayerCount}
+          maxSessionRounds={MAX_SESSION_ROUNDS}
+        />
 
         {connectionStatus === 'connecting' && (
           <div className="flex items-center justify-center gap-2 py-8 text-base text-purple-200">
