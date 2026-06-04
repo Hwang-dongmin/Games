@@ -1026,16 +1026,16 @@
 }
 
 .lexio-offline-setup-hero-row {
-  display: flex;
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 0.75rem 1rem;
   margin-bottom: 0.5rem;
 }
 
 .lexio-offline-setup-rules-btn {
-  flex-shrink: 0;
+  grid-column: 3;
+  justify-self: end;
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
@@ -1069,10 +1069,10 @@
 }
 
 .lexio-offline-setup-title {
-  flex: 1 1 auto;
-  min-width: 0;
+  grid-column: 2;
   margin: 0;
-  text-align: left;
+  justify-self: center;
+  text-align: center;
   font-family: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
   font-size: clamp(1.85rem, 6vw, 2.35rem);
   font-weight: 400;
@@ -1096,10 +1096,11 @@
 
 .lexio-offline-setup-lead {
   margin: 0.85rem auto 0;
-  max-width: 22rem;
+  max-width: 28rem;
   font-size: 0.875rem;
   line-height: 1.65;
-  color: rgba(216, 180, 254, 0.72);
+  text-align: center;
+  color: #e9d5ff;
 }
 
 .lexio-offline-setup-body {
@@ -1114,7 +1115,6 @@
   }
 
   .lexio-offline-setup-hero-row {
-    justify-content: space-between;
     gap: 1.25rem;
     margin-bottom: 0.65rem;
   }
@@ -1134,11 +1134,11 @@
   }
 
   .lexio-offline-setup-lead {
-    margin: 1.1rem 0 0;
-    max-width: none;
+    margin: 1.1rem auto 0;
+    max-width: 40rem;
     font-size: 1.125rem;
-    line-height: 1.5;
-    white-space: nowrap;
+    line-height: 1.55;
+    text-align: center;
   }
 
   .lexio-offline-setup-body {
@@ -1532,13 +1532,13 @@
 }
 
 .lexio-rules-panel::before {
-  top: 84px;
-  background: linear-gradient(180deg, rgba(30, 27, 75, 0.92), transparent);
+  top: var(--lexio-rules-fade-top, 5.25rem);
+  background: linear-gradient(180deg, rgba(19, 17, 31, 0.98), transparent);
 }
 
 .lexio-rules-panel::after {
   bottom: 0;
-  background: linear-gradient(0deg, rgba(10, 10, 35, 0.95), transparent);
+  background: linear-gradient(0deg, rgba(19, 17, 31, 0.98), transparent);
 }
 
 .lexio-rules-scroll {

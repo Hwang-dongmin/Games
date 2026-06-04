@@ -61,8 +61,8 @@ export default function LexioOfflineSetup({
             </button>
           </div>
           <p className="lexio-offline-setup-lead">
-            한국식 셰딩 게임 렉시오를 AI와 함께 플레이합니다. 보유 패를 모두
-            내려놓으면 승리합니다.
+            렉시오에 오신 것을 환영합니다. 한국식 셰딩 게임 렉시오를 AI와 함께
+            플레이합니다. 보유 패를 모두 내려놓으면 승리합니다.
           </p>
         </header>
 
