@@ -862,12 +862,6 @@ export default function LexioOnline() {
               </div>
             )}
 
-            {statusMessage && (
-              <p className="mb-4 text-center text-base text-amber-100/95 bg-amber-950/35 rounded-lg py-2.5 px-4 border border-amber-500/30">
-                {statusMessage}
-              </p>
-            )}
-
             {inviteUrl && (
               <div className="mb-6">
                 <p className="mb-2 text-sm uppercase tracking-widest text-purple-300/70">
