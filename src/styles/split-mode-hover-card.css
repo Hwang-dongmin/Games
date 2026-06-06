@@ -1,0 +1,71 @@
+/* Split-mode hover card — default view fades to left/right choices on hover or tap */
+.split-mode-hover-card {
+  --split-mode-deg: 13deg;
+}
+
+@keyframes splitModeLineRise {
+  from {
+    transform: translate(-50%, -50%) rotate(var(--split-mode-deg)) scaleY(0);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, -50%) rotate(var(--split-mode-deg)) scaleY(1);
+    opacity: 1;
+  }
+}
+
+.split-mode-hover-card .split-mode-split-line {
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 145%;
+  border-radius: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(255, 255, 255, 0.35) 12%,
+    rgba(255, 255, 255, 0.95) 50%,
+    rgba(255, 255, 255, 0.35) 88%,
+    transparent 100%
+  );
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.45);
+  transform: translate(-50%, -50%) rotate(var(--split-mode-deg)) scaleY(0);
+  transform-origin: center center;
+  opacity: 0;
+}
+
+.split-mode-hover-card:hover .split-mode-split-line,
+.split-mode-hover-card:focus-within .split-mode-split-line,
+.split-mode-hover-card.split-mode-hover-card--revealed .split-mode-split-line {
+  animation: splitModeLineRise 0.42s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.split-mode-hover-card.split-mode-hover-card--revealed .split-mode-default {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.split-mode-hover-card.split-mode-hover-card--revealed .split-mode-choices {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (hover: none) {
+  .split-mode-zone-left:active,
+  .split-mode-zone-right:active {
+    background: rgba(0, 0, 0, 0.14);
+  }
+}
+
+/* clip-path set in JS from card size (see SplitModeHoverCard) */
+.split-mode-zone-left,
+.split-mode-zone-right {
+  transition: background 0.25s ease;
+}
+
+.split-mode-zone-left:hover,
+.split-mode-zone-left:focus-visible,
+.split-mode-zone-right:hover,
+.split-mode-zone-right:focus-visible {
+  background: rgba(0, 0, 0, 0.14);
+}
