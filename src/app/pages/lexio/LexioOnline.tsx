@@ -16,6 +16,7 @@ import {
   Link2,
   Crown,
   BookOpen,
+  ChevronLeft,
 } from 'lucide-react';
 import {
   Select,
@@ -744,13 +745,24 @@ export default function LexioOnline() {
               : 'mb-6'
           }`}
         >
-          <Link
-            to="/"
-            className="inline-flex items-center gap-2 rounded-full bg-white/5 px-4 py-2.5 text-sm font-semibold uppercase tracking-widest text-purple-100 border border-purple-500/30 hover:bg-white/10"
-          >
-            <Home className="w-4 h-4" />
-            홈
-          </Link>
+          {screen === 'lobby' ? (
+            <button
+              type="button"
+              onClick={leaveRoom}
+              className="inline-flex items-center gap-2 rounded-full bg-white/5 px-4 py-2.5 text-sm font-semibold uppercase tracking-widest text-purple-100 border border-purple-500/30 hover:bg-white/10"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              뒤로
+            </button>
+          ) : (
+            <Link
+              to="/"
+              className="inline-flex items-center gap-2 rounded-full bg-white/5 px-4 py-2.5 text-sm font-semibold uppercase tracking-widest text-purple-100 border border-purple-500/30 hover:bg-white/10"
+            >
+              <Home className="w-4 h-4" />
+              홈
+            </Link>
+          )}
           <div className="text-center">
             <p
               className={`uppercase text-purple-300/70 ${
