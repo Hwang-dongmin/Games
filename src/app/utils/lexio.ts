@@ -27,6 +27,25 @@ export interface LexioCombination {
   value: number;
 }
 
+export type LexioClapMode = 'sitting' | 'standing';
+
+/** 테이블에 올라온 족보 — AI 박수 애니 선택 */
+export function clapModeForCombo(
+  combo: LexioCombination | null,
+): LexioClapMode | null {
+  if (!combo) return null;
+  if (combo.type === 'straightflush') return 'standing';
+  if (combo.type === 'flush' || combo.type === 'fullhouse') return 'sitting';
+  return null;
+}
+
+export function comboPlaySignature(
+  combo: LexioCombination | null,
+): string | null {
+  if (!combo) return null;
+  return `${combo.type}:${combo.tiles.map((t) => t.id).join(',')}`;
+}
+
 export interface LexioPlayer {
   id: number;
   name: string;
