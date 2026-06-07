@@ -1,7 +1,6 @@
 import { createBrowserRouter } from "react-router";
 import Home from "./pages/Home";
 import Game2048 from "./pages/Game2048";
-import SnakeGame from "./pages/SnakeGame";
 import TexasHoldem from "./pages/TexasHoldem";
 import Lexio from "./pages/Lexio";
 import LexioOnline from "./pages/LexioOnline";
@@ -14,10 +13,6 @@ export const router = createBrowserRouter([
   {
     path: "/2048",
     Component: Game2048,
-  },
-  {
-    path: "/snake",
-    Component: SnakeGame,
   },
   {
     path: "/holdem",

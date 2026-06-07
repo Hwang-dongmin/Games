@@ -13,7 +13,6 @@ const gameAccent: Record<string, { bar: string; glow: string }> = {
   lexio: { bar: 'bg-violet-500', glow: '139, 92, 246' },
   holdem: { bar: 'bg-amber-400', glow: '245, 158, 11' },
   '2048': { bar: 'bg-orange-500', glow: '249, 115, 22' },
-  snake: { bar: 'bg-emerald-400', glow: '52, 211, 153' },
 };
 
 export default function GameHomeCard({ game, to, index = 0 }: GameHomeCardProps) {

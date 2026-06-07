@@ -1,4 +1,4 @@
-import { Grid2x2, Layers, Spade, Zap, type LucideIcon } from 'lucide-react';
+import { Grid2x2, Layers, Spade, type LucideIcon } from 'lucide-react';
 
 export type PlayMode = 'offline' | 'online';
 
@@ -50,18 +50,6 @@ export const games: GameDefinition[] = [
     color: 'from-orange-500 to-red-500',
     image:
       'https://images.unsplash.com/photo-1769577608140-9f91760aef04?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
-    offline: true,
-    online: false,
-  },
-  {
-    id: 'snake',
-    title: '스네이크',
-    description: '뱀을 조종해서 먹이를 먹으세요',
-    icon: Zap,
-    offlinePath: '/snake',
-    color: 'from-green-500 to-emerald-500',
-    image:
-      'https://images.unsplash.com/photo-1525799894461-3cfe39b72d69?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
     offline: true,
     online: false,
   },
