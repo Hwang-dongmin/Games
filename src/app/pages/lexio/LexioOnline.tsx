@@ -859,10 +859,6 @@ export default function LexioOnline() {
                   새 방 만들기
                 </span>
               </button>
-              <p className="mt-3 text-sm text-purple-300/60 leading-relaxed">
-                로그인 없이 PeerJS(P2P)로 친구와 연결합니다. 호스트가 게임을
-                진행합니다.
-              </p>
             </section>
 
             <section
@@ -877,7 +873,7 @@ export default function LexioOnline() {
                 방 참가
               </h2>
               <label className="block text-sm text-purple-200/80 mb-1">
-                방 코드 (6자) — URL 붙여넣기 가능
+                방 코드
               </label>
               <input
                 value={joinCode}
@@ -887,9 +883,7 @@ export default function LexioOnline() {
                 placeholder="예: ABC234"
               />
               <p className="mb-4 text-sm leading-relaxed text-purple-300/60">
-                초대 링크는 브라우저 주소창에 붙여넣어 열거나, 여기에는{' '}
-                <strong className="text-purple-200/80">6자리 코드만</strong>{' '}
-                입력하세요. http://localhost… 전체는 넣지 마세요.
+                초대 링크는 주소창에서 열고, 여기에는 방 코드만 입력하세요.
               </p>
               <button
                 type="button"
