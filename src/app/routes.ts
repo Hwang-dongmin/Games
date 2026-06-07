@@ -2,8 +2,8 @@ import { createBrowserRouter } from "react-router";
 import Home from "./pages/Home";
 import Game2048 from "./pages/Game2048";
 import TexasHoldem from "./pages/TexasHoldem";
-import Lexio from "./pages/Lexio";
-import LexioOnline from "./pages/LexioOnline";
+import Lexio from "./pages/lexio/Lexio";
+import LexioOnline from "./pages/lexio/LexioOnline";
 
 export const router = createBrowserRouter([
   {

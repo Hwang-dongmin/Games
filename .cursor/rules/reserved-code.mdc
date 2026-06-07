@@ -14,8 +14,8 @@ Do **not** delete, move, rename, or "clean up" them unless the user explicitly a
 
 Purpose: hover/tap split card for offline vs online mode selection on the home page.
 
-- `src/app/components/ui/SplitModeHoverCard.tsx`
-- `src/app/components/LexioHomeCard.tsx`
+- `src/app/components/home/SplitModeHoverCard.tsx`
+- `src/app/components/home/LexioHomeCard.tsx`
 - `src/styles/split-mode-hover-card.css` (imported from `src/styles/index.css`)
 - `src/app/components/ui/use-mobile.ts` (used by SplitModeHoverCard and LexioHomeCard)
 

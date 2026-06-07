@@ -1,7 +1,7 @@
 import { Layers, Users } from 'lucide-react';
 import { ImageWithFallback } from './ImageWithFallback';
-import { SplitModeHoverCard } from './ui/SplitModeHoverCard';
-import { useTouchPrimary } from './ui/use-mobile';
+import { SplitModeHoverCard } from './SplitModeHoverCard';
+import { useTouchPrimary } from '../ui/use-mobile';
 
 const LEXIO_IMAGE =
   'https://images.unsplash.com/photo-1742343886931-14ea96977531?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080';

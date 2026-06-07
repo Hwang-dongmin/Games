@@ -33,21 +33,21 @@ import {
   findStarterIndex,
   roundCoinForHand,
   type LexioAIDifficulty,
-} from '../utils/lexio';
-import LexioFirstPersonScene from './lexio/LexioFirstPersonScene';
-import LexioOfflineSetup from './lexio/LexioOfflineSetup';
-import LexioRulesContent from './lexio/LexioRulesContent';
-import LexioSessionRankingPanel from './lexio/LexioSessionRankingPanel';
+} from '../../utils/lexio';
+import LexioFirstPersonScene from './LexioFirstPersonScene';
+import LexioOfflineSetup from './LexioOfflineSetup';
+import LexioRulesContent from './LexioRulesContent';
+import LexioSessionRankingPanel from './LexioSessionRankingPanel';
 import {
   buildDiscardPlacements,
   type DiscardPlacement,
-} from '../utils/lexioDiscardLayout';
-import { setLexioBgmMode, stopLexioBgm } from '../utils/lexioBgm';
+} from '../../utils/lexioDiscardLayout';
+import { setLexioBgmMode, stopLexioBgm } from '../../utils/lexioBgm';
 import {
   playLexioSound,
   unlockLexioAudio,
-} from '../utils/lexioSounds';
-import LexioSfxToggle from '../components/lexio/LexioSfxToggle';
+} from '../../utils/lexioSounds';
+import LexioSfxToggle from '../../components/lexio/LexioSfxToggle';
 
 type GamePhase = 'setup' | 'playing' | 'finished';
 type UiPlayer = LexioPlayer;

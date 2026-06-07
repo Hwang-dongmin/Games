@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Volume2, VolumeX } from 'lucide-react';
-import { cn } from './ui/utils';
-import { startHomeBgm } from '../utils/homeBgm';
+import { cn } from '../ui/utils';
+import { startHomeBgm } from '../../utils/homeBgm';
 import {
   isLexioSfxMuted,
   setLexioSfxMuted,
   unlockLexioAudio,
-} from '../utils/lexioSounds';
+} from '../../utils/lexioSounds';
 
 export default function HomeSfxToggle() {
   const [muted, setMuted] = useState(() => isLexioSfxMuted());

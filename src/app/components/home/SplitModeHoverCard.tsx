@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { useTouchPrimary } from './use-mobile';
+import { useTouchPrimary } from '../ui/use-mobile';
 
 /** Matches CSS rotate(13deg) on the vertical split line through card center */
 export const SPLIT_MODE_DEG = 13;

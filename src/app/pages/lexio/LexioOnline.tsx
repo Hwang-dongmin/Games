@@ -23,16 +23,16 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../components/ui/select';
-import LexioFirstPersonScene from './lexio/LexioFirstPersonScene';
-import LexioOnlineWelcomeOverlay from './lexio/LexioOnlineWelcomeOverlay';
-import LexioRulesModal from './lexio/LexioRulesModal';
-import LexioSessionRankingPanel from './lexio/LexioSessionRankingPanel';
-import { beats, comboKorean, detectCombo, aiFindMove, aiLeadFallbackTile } from '../utils/lexio';
+} from '../../components/ui/select';
+import LexioFirstPersonScene from './LexioFirstPersonScene';
+import LexioOnlineWelcomeOverlay from './LexioOnlineWelcomeOverlay';
+import LexioRulesModal from './LexioRulesModal';
+import LexioSessionRankingPanel from './LexioSessionRankingPanel';
+import { beats, comboKorean, detectCombo, aiFindMove, aiLeadFallbackTile } from '../../utils/lexio';
 import {
   buildOnlineFinishTableUi,
   clientViewToPlayers,
-} from '../utils/lexioOnlineScene';
+} from '../../utils/lexioOnlineScene';
 import {
   applyPass,
   applyPlay,
@@ -45,7 +45,7 @@ import {
   startNewRound,
   type ClientGameView,
   type LexioGameState,
-} from '../utils/lexioGameEngine';
+} from '../../utils/lexioGameEngine';
 import {
   buildInviteUrl,
   createHostRoom,
@@ -60,14 +60,14 @@ import {
   type LobbyPlayer,
   type LobbySettings,
   type WireMessage,
-} from '../utils/lexioMultiplayer';
-import { setLexioBgmMode, stopLexioBgm } from '../utils/lexioBgm';
+} from '../../utils/lexioMultiplayer';
+import { setLexioBgmMode, stopLexioBgm } from '../../utils/lexioBgm';
 import {
   playLexioSound,
   reactLexioGameViewSounds,
   unlockLexioAudio,
-} from '../utils/lexioSounds';
-import LexioSfxToggle from '../components/lexio/LexioSfxToggle';
+} from '../../utils/lexioSounds';
+import LexioSfxToggle from '../../components/lexio/LexioSfxToggle';
 
 type Screen = 'entry' | 'lobby' | 'game';
 

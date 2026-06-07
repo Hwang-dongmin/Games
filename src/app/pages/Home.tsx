@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Gamepad2 } from 'lucide-react';
-import GameHomeCard from '../components/GameHomeCard';
-import HomeSfxToggle from '../components/HomeSfxToggle';
-import PlayModeToggle from '../components/PlayModeToggle';
+import GameHomeCard from '../components/home/GameHomeCard';
+import HomeSfxToggle from '../components/home/HomeSfxToggle';
+import PlayModeToggle from '../components/home/PlayModeToggle';
 import {
   getGamePath,
   getGamesForMode,

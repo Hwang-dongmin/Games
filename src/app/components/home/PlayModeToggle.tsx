@@ -1,5 +1,5 @@
 import { Layers, Users } from 'lucide-react';
-import type { PlayMode } from '../data/games';
+import type { PlayMode } from '../../data/games';
 
 type PlayModeToggleProps = {
   mode: PlayMode;
