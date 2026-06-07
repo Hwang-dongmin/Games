@@ -254,7 +254,3 @@ export function setLexioBgmMode(mode: LexioBgmMode): void {
 export function startLexioBgm(mode: LexioBgmMode = 'playing'): void {
   setLexioBgmMode(mode);
 }
-
-export function isLexioBgmActive(): boolean {
-  return engine !== null;
-}

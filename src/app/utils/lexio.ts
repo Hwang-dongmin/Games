@@ -51,17 +51,17 @@ export const COLOR_HEX: Record<LexioColor, string> = {
 };
 
 // 숫자 강도: 3->1, 4->2, ..., 15->13, 1->14, 2->15
-export function numberStrength(n: number): number {
+function numberStrength(n: number): number {
   if (n === 1) return 14;
   if (n === 2) return 15;
   return n - 2;
 }
 
-export function tileStrength(t: LexioTile): number {
+function tileStrength(t: LexioTile): number {
   return numberStrength(t.number) * 10 + COLOR_RANK[t.color];
 }
 
-export function compareTiles(a: LexioTile, b: LexioTile): number {
+function compareTiles(a: LexioTile, b: LexioTile): number {
   return tileStrength(a) - tileStrength(b);
 }
 
@@ -283,7 +283,7 @@ function* combinations<T>(arr: T[], k: number): Generator<T[]> {
 }
 
 // 손패에서 size개 카드로 만들 수 있는 모든 유효 조합 찾기
-export function enumerateCombos(
+function enumerateCombos(
   hand: LexioTile[],
   size: number,
 ): LexioCombination[] {
@@ -325,7 +325,7 @@ export const LEXIO_AI_DIFFICULTY_OPTIONS: {
   },
 ];
 
-export type AiPlayerSnapshot = {
+type AiPlayerSnapshot = {
   id: number;
   handCount: number;
 };
@@ -388,7 +388,7 @@ function maxNumberForPlayerCount(playerCount: number): number {
 }
 
 /** 숫자별로 상대 손에 남아 있을 수 있는 장수 (0~4) */
-export function buildRemainingCountByNumber(
+function buildRemainingCountByNumber(
   hand: LexioTile[],
   discardedTiles: LexioTile[],
   tablePlay: LexioCombination | null | undefined,

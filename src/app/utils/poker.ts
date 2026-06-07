@@ -1,13 +1,13 @@
 // 포커 카드 타입 정의
-export type Suit = '♠' | '♥' | '♦' | '♣';
-export type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A';
+type Suit = '♠' | '♥' | '♦' | '♣';
+type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A';
 
 export interface Card {
   suit: Suit;
   rank: Rank;
 }
 
-export type AIPersonalityId =
+type AIPersonalityId =
   | 'tight-passive'
   | 'tight-aggressive'
   | 'loose-passive'
@@ -30,7 +30,7 @@ export interface AIPersonality {
   foldThreshold: number;
 }
 
-export const AI_PERSONALITIES: AIPersonality[] = [
+const AI_PERSONALITIES: AIPersonality[] = [
   {
     id: 'tight-passive',
     label: '타이트 패시브',
@@ -116,7 +116,7 @@ export interface Player {
   personality?: AIPersonality;
 }
 
-export type HandRank =
+type HandRank =
   | 'High Card'
   | 'One Pair'
   | 'Two Pair'
@@ -464,7 +464,7 @@ export function getAIRaiseAmount(player: Player, currentBet: number, bigBlind: n
 }
 
 // 한국어 핸드 랭크 이름
-export function getHandRankKorean(rank: HandRank): string {
+function getHandRankKorean(rank: HandRank): string {
   const korean: Record<HandRank, string> = {
     'Royal Flush': '로얄 플러시',
     'Straight Flush': '스트레이트 플러시',

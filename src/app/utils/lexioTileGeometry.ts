@@ -52,7 +52,7 @@ const _discardRot = new THREE.Matrix4();
 const _discardEuler = new THREE.Euler();
 
 /** DiscardFaceDownTile 회전과 동일 — 로컬 bbox 최저 Y */
-export function discardTileBottomMinY(
+function discardTileBottomMinY(
   geom: THREE.BufferGeometry,
   isFlat: boolean,
   spin: number,

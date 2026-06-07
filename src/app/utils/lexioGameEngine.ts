@@ -15,9 +15,7 @@ import {
   type DiscardPlacement,
 } from './lexioDiscardLayout';
 
-export type { DiscardPlacement };
-
-export type OnlineLexioPlayer = {
+type OnlineLexioPlayer = {
   seat: number;
   peerId: string;
   name: string;
@@ -26,7 +24,7 @@ export type OnlineLexioPlayer = {
   isAI?: boolean;
 };
 
-export function aiPeerId(seat: number): string {
+function aiPeerId(seat: number): string {
   return `ai-seat-${seat}`;
 }
 
@@ -50,13 +48,13 @@ export function replacePlayerWithAI(
   return { state: { ...state, players }, nickname: player.name };
 }
 
-export type LastRoundCoinRow = {
+type LastRoundCoinRow = {
   playerId: number;
   earned: number;
   doubled: boolean;
 };
 
-export type LexioGamePhase = 'lobby' | 'playing' | 'finished';
+type LexioGamePhase = 'lobby' | 'playing' | 'finished';
 
 export type LexioGameState = {
   players: OnlineLexioPlayer[];
@@ -101,7 +99,7 @@ export function createEmptyGameState(
   };
 }
 
-export function dealOnlineHand(
+function dealOnlineHand(
   lobbyPlayers: { seat: number; peerId: string; name: string }[],
 ): OnlineLexioPlayer[] {
   const n = lobbyPlayers.length;
@@ -172,7 +170,7 @@ function appendDiscardTiles(
   };
 }
 
-export function nextSeatIndex(
+function nextSeatIndex(
   currentIdx: number,
   players: OnlineLexioPlayer[],
 ): number {

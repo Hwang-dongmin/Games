@@ -1,7 +1,7 @@
 import type { LexioTile } from './lexio';
 
 /** 같은 숫자 타일끼리 한 그룹 (손패 정렬 순서 유지) */
-export function groupTilesByNumber(tiles: LexioTile[]): LexioTile[][] {
+function groupTilesByNumber(tiles: LexioTile[]): LexioTile[][] {
   if (tiles.length === 0) return [];
   const groups: LexioTile[][] = [[tiles[0]]];
   for (let i = 1; i < tiles.length; i++) {
@@ -14,7 +14,7 @@ export function groupTilesByNumber(tiles: LexioTile[]): LexioTile[][] {
 }
 
 /** 숫자 그룹 단위로 두 줄에 나눔 — 같은 숫자는 항상 같은 줄 */
-export function splitHandIntoTwoRows(tiles: LexioTile[]): [LexioTile[], LexioTile[]] {
+function splitHandIntoTwoRows(tiles: LexioTile[]): [LexioTile[], LexioTile[]] {
   const groups = groupTilesByNumber(tiles);
   const row0: LexioTile[] = [];
   const row1: LexioTile[] = [];
@@ -34,7 +34,7 @@ export function splitHandIntoTwoRows(tiles: LexioTile[]): [LexioTile[], LexioTil
   return [row0, row1];
 }
 
-export type HandRowLayer = 'front' | 'back' | 'single';
+type HandRowLayer = 'front' | 'back' | 'single';
 
 export type HandTilePlacement = {
   tile: LexioTile;
