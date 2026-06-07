@@ -9,6 +9,10 @@ import {
   type PlayMode,
 } from '../data/games';
 import { startHomeBgm, stopHomeBgm } from '../utils/homeBgm';
+import {
+  loadSessionPlayMode,
+  saveSessionPlayMode,
+} from '../utils/playModeSession';
 import { isLexioSfxMuted, unlockLexioAudio } from '../utils/lexioSounds';
 
 const gridClassByMode: Record<PlayMode, string> = {
@@ -20,8 +24,15 @@ const pageShellClass =
   'mx-auto w-full max-w-6xl px-5 sm:px-8 lg:max-w-7xl lg:px-10 xl:max-w-[85rem] xl:px-12 2xl:max-w-[96rem] 2xl:px-16';
 
 export default function Home() {
-  const [mode, setMode] = useState<PlayMode>('offline');
+  const [mode, setMode] = useState<PlayMode>(
+    () => loadSessionPlayMode() ?? 'offline',
+  );
   const visibleGames = getGamesForMode(mode);
+
+  const handleModeChange = (next: PlayMode) => {
+    setMode(next);
+    saveSessionPlayMode(next);
+  };
 
   useEffect(() => {
     const onPointerDown = () => {
@@ -55,7 +66,7 @@ export default function Home() {
 
           <div className="flex items-center gap-2.5 sm:gap-3">
             <HomeSfxToggle />
-            <PlayModeToggle mode={mode} onChange={setMode} />
+            <PlayModeToggle mode={mode} onChange={handleModeChange} />
           </div>
         </div>
       </header>

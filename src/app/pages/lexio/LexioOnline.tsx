@@ -109,10 +109,6 @@ export default function LexioOnline() {
 
   const [screen, setScreen] = useState<Screen>('entry');
   const [nickname, setNickname] = useState(loadStoredNickname);
-
-  useEffect(() => {
-    persistNickname(nickname);
-  }, [nickname]);
   const [joinCode, setJoinCode] = useState(roomFromUrl);
   const [isHost, setIsHost] = useState(false);
   const [roomId, setRoomId] = useState('');
@@ -409,6 +405,7 @@ export default function LexioOnline() {
   }, [isHost, screen, gameView, broadcastGame]);
 
   const createRoom = async () => {
+    persistNickname(nickname);
     cleanup();
     setConnectionStatus('connecting');
     setStatusMessage('');
@@ -444,6 +441,7 @@ export default function LexioOnline() {
   };
 
   const joinRoom = async (codeInput?: string) => {
+    persistNickname(nickname);
     cleanup();
     setConnectionStatus('connecting');
     setStatusMessage('');
