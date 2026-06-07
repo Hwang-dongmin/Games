@@ -11,8 +11,12 @@ import {
   layoutHandTiles3D,
   layoutOpponentHandSlots3D,
   layoutOpponentHandTiles3D,
+  OPPONENT_MAX_CARDS_PER_ROW,
 } from '../../utils/lexioHandLayout';
-import { LEXIO_CENTER_PLAY_TABLE_Z } from '../../utils/lexioTableLayout';
+import {
+  LEXIO_CENTER_PLAY_TABLE_Z,
+  LEXIO_TABLE_PLAY_RADIUS,
+} from '../../utils/lexioTableLayout';
 import {
   discardTileContactGroupY,
   getRoundedTileGeometry,
@@ -24,6 +28,38 @@ import type {
   LexioPlayer,
   LexioCombination,
 } from '../../utils/lexio';
+import {
+  comboPlaySignature,
+} from '../../utils/lexio';
+import {
+  pickAiReactionSpeaker,
+  passReactionClip,
+  pickIdleReactionClip,
+  pickSeatCharacterReaction,
+  shouldAiTurnPoint,
+  shouldReactToPass,
+  shouldReactToSingle,
+  stallReactionClip,
+  tableReactionClipForCombo,
+  type LexioOpponentReactionSignal,
+} from '../../utils/lexioCharacterReactions';
+import {
+  canEmitEventReaction,
+  canEmitIdleReaction,
+  canEmitPassReaction,
+  createReactionGateState,
+  markEventReaction,
+  markIdleReaction,
+  markPassReaction,
+  REACTION_COOLDOWN,
+} from '../../utils/lexioReactionGate';
+import {
+  playLexioVoice,
+  stopLexioVoice,
+  voiceLineForCombo,
+} from '../../utils/lexioVoice';
+import { LexioOpponentCharacter3D } from '../../components/lexio/LexioOpponentCharacter3D';
+import { lexioOpponentCharacterForPlayerId, LEXIO_OPPONENT_CHARACTERS } from '../../utils/lexioCharacterReactions';
 import {
   LexioPlayCard,
   lexioColorToSuit,
@@ -66,11 +102,20 @@ const TILE_W = 0.212;
 const TILE_H = TILE_W * CARD_RATIO_H_W;
 const TILE_T = 0.092;
 const FACE_Z = TILE_T / 2 + 0.0015;
-const TABLE_TOP_Y = 0.5;
+/** 캐릭터 제외 — 테이블·패·카메라 등 playfield 전체 Y 보정 */
+const SCENE_PLAYFIELD_LIFT_Y = 0.3;
+/** 초록·갈색 테이블 메시 (TableRoom) — TABLE_TOP_Y와 펠트 윗면 동기화 */
+const TABLE_FELT_CENTER_Y = 0.56;
+const TABLE_FELT_HEIGHT = 0.04;
+const TABLE_BROWN_CENTER_Y = 0.53;
+const TABLE_BROWN_HEIGHT = 0.08;
+/** 펠트 윗면 Y — 패·손패 접촉 기준 */
+const TABLE_TOP_Y =
+  TABLE_FELT_CENTER_Y + TABLE_FELT_HEIGHT / 2 + SCENE_PLAYFIELD_LIFT_Y;
 const TABLE_SURFACE_EPS = 0.0015;
 const TILT_BACK = -0.18;
 /** 플레이어 손패 — 테이블 가장자리(카메라 쪽) */
-const HAND_TABLE_Z = 1.42;
+const HAND_TABLE_Z = 1.45;
 /** 판 종료: 패 공개·카메라 탑다운 애니메이션 길이(초) */
 const FINISH_REVEAL_SEC = 2;
 /** 세션 최초 진입: 위에서 시계방향으로 내려오며 1인칭 시점(초) */
@@ -85,8 +130,6 @@ function easeInOutCubic(t: number): number {
 const _v3a = new THREE.Vector3();
 const _v3b = new THREE.Vector3();
 const _v3c = new THREE.Vector3();
-const _qA = new THREE.Quaternion();
-const _qB = new THREE.Quaternion();
 const _qOut = new THREE.Quaternion();
 const _axisY = new THREE.Vector3(0, 1, 0);
 const HOVER_LIFT = 0.088;
@@ -168,9 +211,11 @@ function solveGroupYOnTable(
   tileX = 0,
   tileY = 0,
   tileZ = 0,
+  tiltX = TILT_BACK,
+  contactTarget = TABLE_CONTACT_TARGET,
 ): number {
-  let lo = 0.35;
-  let hi = 0.95;
+  let lo = TABLE_TOP_Y - 0.5;
+  let hi = TABLE_TOP_Y + 0.15;
   for (let i = 0; i < 24; i++) {
     const mid = (lo + hi) / 2;
     if (
@@ -181,7 +226,8 @@ function solveGroupYOnTable(
         tileX,
         tileY,
         tileZ,
-      }) > TABLE_CONTACT_TARGET
+        tiltX,
+      }) > contactTarget
     ) {
       hi = mid;
     } else {
@@ -210,9 +256,13 @@ const TILE_FLAT_Y =
   TABLE_SURFACE_EPS;
 
 /** 상대·AI 손패 — 기존(0.6) 대비 살짝 작게. 내 패(1.0)와 무관 */
-const OPPONENT_TILE_SCALE = 0.56;
+const OPPONENT_TILE_SCALE = 0.53;
 const OPPONENT_TILE_W = TILE_W * OPPONENT_TILE_SCALE;
 const OPPONENT_TILE_H = TILE_H * OPPONENT_TILE_SCALE;
+/** AI 패 두께 — 면적(0.52)보다 두께만 조금 덜 줄임 */
+const OPPONENT_TILE_T = TILE_T * 0.58;
+/** AI 손패 기울기 — 플레이어(TILT_BACK)보다 완만해 테이블에 자연스럽게 기대짐 */
+const OPPONENT_TILT_BACK = -0.06;
 /** 기존 상대 패 간격(TILE_W×0.78) 유지 — 카드만 줄이고 간격은 그대로 */
 const OPPONENT_HAND_GAP = TILE_W * 0.78;
 const OPPONENT_HAND_ROW_FRONT_Z = 0.16;
@@ -220,17 +270,66 @@ const OPPONENT_HAND_ROW_BACK_Z = -0.07;
 const OPPONENT_TILE_GEOM = getRoundedTileGeometry(
   OPPONENT_TILE_W,
   OPPONENT_TILE_H,
-  TILE_T,
+  OPPONENT_TILE_T,
 );
 /** 좌석→테이블 안쪽 오프셋 (작을수록 플레이어 시점에 가깝게) */
-const OPPONENT_HAND_Z = -0.92;
+const OPPONENT_HAND_Z = -1.0;
+/** 판 종료 AI 패 공개 — 좌석→테이블 중심 거리 대비 안쪽 이동 (0=좌석, 1=중심) */
+const OPPONENT_REVEAL_CENTER_FRAC = 0.54;
+/** 캐릭터 발/베이스 높이 — 테이블·패는 그대로, 캐릭터만 위로 */
+const CHARACTER_BASE_Y = 0;
+/** 캐릭터 테이블 쪽 당김 — 좌석마다 테이블 반경 밖으로 clamp */
+/** 좌석→테이블 안쪽 당김 — 작을수록 캐릭터가 테이블에서 멀어져 잘림 감소 */
+const CHARACTER_TABLE_INSET_PREFERRED = 0.40;
+const CHARACTER_SKIRT_CLEARANCE = 0.15;
 
-function opponentHandGroupY(cardYaw: number): number {
+function characterTableInset(seatPosition: [number, number, number]): number {
+  const dist = Math.hypot(seatPosition[0], seatPosition[2]);
+  const maxInset =
+    dist - LEXIO_TABLE_PLAY_RADIUS - CHARACTER_SKIRT_CLEARANCE;
+  return Math.max(
+    0,
+    Math.min(CHARACTER_TABLE_INSET_PREFERRED, maxInset),
+  );
+}
+
+function opponentHandGroupY(
+  cardYaw: number,
+  handZ = OPPONENT_HAND_Z,
+  referenceTileZ = 0,
+): number {
   return solveGroupYOnTable(
     OPPONENT_TILE_GEOM,
-    OPPONENT_HAND_Z,
+    handZ,
     cardYaw,
+    0,
+    0,
+    referenceTileZ,
+    OPPONENT_TILT_BACK,
   );
+}
+
+/** 북서(3)·북동(4) — 대각 좌석은 앞줄(+Z)이 테이블 밖으로 나가기 쉬움 */
+function opponentHandLayoutForSeat(playerId: number): {
+  gap: number;
+  frontRowZ: number;
+  backRowZ: number;
+  handZ: number;
+} {
+  if (playerId === 3 || playerId === 4) {
+    return {
+      gap: OPPONENT_HAND_GAP * 0.9,
+      frontRowZ: 0.05,
+      backRowZ: -0.19,
+      handZ: -1.14,
+    };
+  }
+  return {
+    gap: OPPONENT_HAND_GAP,
+    frontRowZ: OPPONENT_HAND_ROW_FRONT_Z,
+    backRowZ: OPPONENT_HAND_ROW_BACK_Z,
+    handZ: OPPONENT_HAND_Z,
+  };
 }
 
 /** 세운 패 — 그룹 내 (x,y,z) 배치 후에도 바닥 높이 동일 */
@@ -272,6 +371,29 @@ function tileLocalWithTableContact(
     }
   }
   return [layoutX, layoutY + (yLo + yHi) / 2, layoutZ];
+}
+
+/** AI 손패 — 줄(Z)마다 기울기 보정해 테이블 접촉 높이 통일 */
+function opponentTileLocalWithTableContact(
+  layoutX: number,
+  layoutY: number,
+  layoutZ: number,
+  opponentHandY: number,
+  handZ: number,
+  cardYaw: number,
+): [number, number, number] {
+  return tileLocalWithTableContact(
+    layoutX,
+    layoutY,
+    layoutZ,
+    OPPONENT_TILE_GEOM,
+    {
+      groupY: opponentHandY,
+      groupZ: handZ,
+      cardYaw,
+      tiltX: OPPONENT_TILT_BACK,
+    },
+  );
 }
 
 const TILE_RENDER_ORDER: Record<'back' | 'single' | 'front', number> = {
@@ -512,16 +634,18 @@ function TileBack3D({
   position,
   rotation,
   tileScale = 0.85,
+  tileT = TILE_T,
 }: {
   position: [number, number, number];
   rotation?: [number, number, number];
   tileScale?: number;
+  tileT?: number;
 }) {
   const w = TILE_W * tileScale;
   const h = TILE_H * tileScale;
   const backGeom = useMemo(
-    () => getRoundedTileGeometry(w, h, TILE_T),
-    [w, h],
+    () => getRoundedTileGeometry(w, h, tileT),
+    [w, h, tileT],
   );
   return (
     <group position={position} rotation={rotation ?? [0, 0, 0]}>
@@ -664,6 +788,8 @@ function OpponentRevealAnimated({
   revealOffsetZ,
   tiles,
   finishHud,
+  handLayout,
+  opponentHandY,
 }: {
   cardYaw: number;
   revealOffsetX: number;
@@ -671,6 +797,8 @@ function OpponentRevealAnimated({
   revealOffsetZ: number;
   tiles: LexioTile[];
   finishHud: { handCount: number; roundEarned: number };
+  handLayout: ReturnType<typeof opponentHandLayoutForSeat>;
+  opponentHandY: number;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const t0Ref = useRef<number | null>(null);
@@ -679,22 +807,44 @@ function OpponentRevealAnimated({
   const revealPlacements = useMemo(
     () =>
       layoutOpponentHandTiles3D(tiles, {
-        gap: OPPONENT_HAND_GAP,
-        frontRowZ: OPPONENT_HAND_ROW_FRONT_Z,
-        backRowZ: OPPONENT_HAND_ROW_BACK_Z,
-      }),
-    [tileIds],
+        gap: handLayout.gap,
+        frontRowZ: handLayout.frontRowZ,
+        backRowZ: handLayout.backRowZ,
+      }).map((p) => ({
+        ...p,
+        position: opponentTileLocalWithTableContact(
+          p.position[0],
+          p.position[1],
+          p.position[2],
+          opponentHandY,
+          handLayout.handZ,
+          cardYaw,
+        ),
+      })),
+    [
+      tileIds,
+      handLayout.gap,
+      handLayout.frontRowZ,
+      handLayout.backRowZ,
+      handLayout.handZ,
+      opponentHandY,
+      cardYaw,
+    ],
   );
 
   const pStart = useMemo(() => {
     const y = solveGroupYOnTable(
       OPPONENT_TILE_GEOM,
-      OPPONENT_HAND_Z,
+      handLayout.handZ,
       cardYaw,
+      0,
+      0,
+      handLayout.frontRowZ,
+      OPPONENT_TILT_BACK,
     );
-    const p = new THREE.Vector3(0, y, OPPONENT_HAND_Z);
+    const p = new THREE.Vector3(0, y, handLayout.handZ);
     return p.applyAxisAngle(_axisY, cardYaw);
-  }, [cardYaw]);
+  }, [cardYaw, handLayout.handZ, handLayout.frontRowZ]);
 
   const pEnd = useMemo(
     () => new THREE.Vector3(revealOffsetX, revealOffsetY, revealOffsetZ),
@@ -704,7 +854,7 @@ function OpponentRevealAnimated({
   const qStart = useMemo(() => {
     const qX = new THREE.Quaternion().setFromAxisAngle(
       new THREE.Vector3(1, 0, 0),
-      TILT_BACK,
+      OPPONENT_TILT_BACK,
     );
     const qY = new THREE.Quaternion().setFromAxisAngle(_axisY, cardYaw);
     return qY.multiply(qX);
@@ -860,17 +1010,16 @@ function HumanRevealAnimated({
 function OpponentSeat({
   player,
   seatPosition,
-  faceYaw,
   cardYaw,
   isActive,
   showPass,
   reveal,
   peerCoins,
   sessionCoins,
+  characterReaction,
 }: {
   player: LexioPlayer;
   seatPosition: [number, number, number];
-  faceYaw: number;
   cardYaw: number;
   isActive: boolean;
   showPass: boolean;
@@ -878,50 +1027,82 @@ function OpponentSeat({
   peerCoins: LexioPlayerFinishCoins | null;
   /** 세션 누적 코인 (진행 중 이름 아래) */
   sessionCoins: number;
+  characterReaction: LexioOpponentReactionSignal | null;
 }) {
+  const handLayout = useMemo(
+    () => opponentHandLayoutForSeat(player.id),
+    [player.id],
+  );
   const handCount = player.hand.length;
   const backSlots = useMemo(
     () =>
       layoutOpponentHandSlots3D(handCount, {
-        gap: OPPONENT_HAND_GAP,
-        frontRowZ: OPPONENT_HAND_ROW_FRONT_Z,
-        backRowZ: OPPONENT_HAND_ROW_BACK_Z,
+        gap: handLayout.gap,
+        frontRowZ: handLayout.frontRowZ,
+        backRowZ: handLayout.backRowZ,
       }),
-    [handCount],
+    [handCount, handLayout.gap, handLayout.frontRowZ, handLayout.backRowZ],
   );
   const opponentHandY = useMemo(
-    () => opponentHandGroupY(cardYaw),
-    [cardYaw],
+    () =>
+      opponentHandGroupY(
+        cardYaw,
+        handLayout.handZ,
+        handCount <= OPPONENT_MAX_CARDS_PER_ROW ? 0 : handLayout.frontRowZ,
+      ),
+    [cardYaw, handLayout.handZ, handLayout.frontRowZ, handCount],
   );
 
   // 좌석 그룹은 회전 없이 seatPosition에 놓여 있으므로,
   // 공개된 카드의 로컬 오프셋이 곧 (월드 위치 - seatPosition)이 된다.
   // cardYaw는 -Z 로컬 방향을 테이블 중앙으로 향하게 하는 회전각이다.
-  const layoutDistance = 0.88;
+  const distToCenter = Math.hypot(seatPosition[0], seatPosition[2]);
+  const layoutDistance = distToCenter * OPPONENT_REVEAL_CENTER_FRAC;
   const revealOffset: [number, number, number] = [
     -layoutDistance * Math.sin(cardYaw),
-    TILE_FLAT_Y - seatPosition[1],
+    TILE_FLAT_Y - seatPosition[1] - SCENE_PLAYFIELD_LIFT_Y,
     -layoutDistance * Math.cos(cardYaw),
   ];
+  const opponentHandLocalY = opponentHandY - SCENE_PLAYFIELD_LIFT_Y;
+
+  const opponentSlotPosition = useMemo(
+    () => (slot: { position: [number, number, number] }) =>
+      opponentTileLocalWithTableContact(
+        slot.position[0],
+        slot.position[1],
+        slot.position[2],
+        opponentHandY,
+        handLayout.handZ,
+        cardYaw,
+      ),
+    [opponentHandY, handLayout.handZ, cardYaw],
+  );
+
+  const lookAtTableYaw = Math.atan2(-seatPosition[0], -seatPosition[2]);
+  const characterInset = useMemo(
+    () => characterTableInset(seatPosition),
+    [seatPosition[0], seatPosition[2]],
+  );
+  const characterId = lexioOpponentCharacterForPlayerId(player.id);
+  const characterDisplayName =
+    LEXIO_OPPONENT_CHARACTERS[characterId].displayName ?? player.name;
 
   return (
     <group position={seatPosition}>
+      <group rotation={[0, lookAtTableYaw, 0]}>
+        <group position={[0, CHARACTER_BASE_Y, characterInset]}>
+          <LexioOpponentCharacter3D
+            seatPosition={seatPosition}
+            characterId={characterId}
+            isActive={isActive}
+            reaction={characterReaction}
+          />
+        </group>
+      </group>
+
+      <group position={[0, SCENE_PLAYFIELD_LIFT_Y, 0]}>
       {!reveal && (
         <>
-          {/* 캐릭터 (테이블 바깥) */}
-          <group rotation={[0, faceYaw, 0]}>
-            <mesh castShadow position={[0, 0.55, 0]}>
-              <capsuleGeometry args={[0.22, 0.65, 6, 12]} />
-              <meshStandardMaterial
-                color={isActive ? '#a78bfa' : '#57534e'}
-                metalness={0.2}
-                roughness={0.5}
-                emissive={isActive ? '#5b21b6' : '#000000'}
-                emissiveIntensity={isActive ? 0.35 : 0}
-              />
-            </mesh>
-          </group>
-
           {/* 이름표는 항상 카메라(플레이어)를 향함 */}
           <Billboard position={[0, 1.5, 0]}>
             <Text
@@ -932,7 +1113,7 @@ function OpponentSeat({
               outlineWidth={0.016}
               outlineColor="#1e1b4b"
             >
-              {player.name}
+              {characterDisplayName}
             </Text>
           </Billboard>
           <Billboard position={[0, 1.28, 0]}>
@@ -972,6 +1153,8 @@ function OpponentSeat({
             revealOffsetY={revealOffset[1]}
             revealOffsetZ={revealOffset[2]}
             tiles={player.hand}
+            handLayout={handLayout}
+            opponentHandY={opponentHandY}
             finishHud={{
               handCount: player.hand.length,
               roundEarned: peerCoins?.roundEarned ?? 0,
@@ -982,16 +1165,17 @@ function OpponentSeat({
         // 진행 중: 좌석에서 테이블 안쪽으로 옮긴 위치(플레이어에 더 가깝게), 테이블 위에 일렬로 세움
         <group rotation={[0, cardYaw, 0]}>
           <group
-            position={[0, opponentHandY, OPPONENT_HAND_Z]}
-            rotation={[TILT_BACK, 0, 0]}
+            position={[0, opponentHandLocalY, handLayout.handZ]}
+            rotation={[OPPONENT_TILT_BACK, 0, 0]}
           >
             {backSlots
               .filter((s) => s.rowLayer === 'back')
               .map((slot, i) => (
                 <TileBack3D
                   key={`back-${i}`}
-                  position={slot.position}
+                  position={opponentSlotPosition(slot)}
                   tileScale={OPPONENT_TILE_SCALE}
+                  tileT={OPPONENT_TILE_T}
                 />
               ))}
             {backSlots
@@ -1001,33 +1185,41 @@ function OpponentSeat({
               .map((slot, i) => (
                 <TileBack3D
                   key={`front-${i}`}
-                  position={slot.position}
+                  position={opponentSlotPosition(slot)}
                   tileScale={OPPONENT_TILE_SCALE}
+                  tileT={OPPONENT_TILE_T}
                 />
               ))}
           </group>
         </group>
       )}
+      </group>
     </group>
   );
 }
 
 function TableRoom() {
+  const lift = SCENE_PLAYFIELD_LIFT_Y;
   return (
     <>
+      {/** 그림자·캐릭터 기준 바닥 — playfield lift와 분리 (y=0) */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[40, 40]} />
         <meshStandardMaterial color="#0f172a" roughness={0.95} metalness={0} />
       </mesh>
-      <mesh position={[0, 0.42, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[2.35, 2.45, 0.08, 48]} />
+      <mesh
+        position={[0, TABLE_BROWN_CENTER_Y + lift, 0]}
+        castShadow
+        receiveShadow
+      >
+        <cylinderGeometry args={[2.18, 2.2, TABLE_BROWN_HEIGHT, 48]} />
         <meshStandardMaterial color="#3f2e1a" roughness={0.7} metalness={0.05} />
       </mesh>
-      <mesh position={[0, 0.48, 0]} receiveShadow>
-        <cylinderGeometry args={[2.15, 2.15, 0.04, 48]} />
+      <mesh position={[0, TABLE_FELT_CENTER_Y + lift, 0]} receiveShadow>
+        <cylinderGeometry args={[2.15, 2.15, TABLE_FELT_HEIGHT, 48]} />
         <meshStandardMaterial color="#14532d" roughness={0.85} metalness={0} />
       </mesh>
-      <mesh position={[0, 2.8, -3.6]} rotation={[0.15, 0, 0]} receiveShadow>
+      <mesh position={[0, 2.8 + lift, -3.6]} rotation={[0.15, 0, 0]} receiveShadow>
         <planeGeometry args={[14, 6]} />
         <meshStandardMaterial color="#1e1b4b" roughness={0.9} />
       </mesh>
@@ -1164,16 +1356,16 @@ function HandRow3D({
 }
 
 /** 좌석 번호별 테이블 위치 (0=북, 1=서, 2=동, 3=북서, 4=북동) */
-const TABLE_SEAT_BY_ID: Record<
-  number,
-  { pos: [number, number, number]; yaw: number }
-> = {
-  0: { pos: [0, 0, -2.55], yaw: Math.PI },
-  1: { pos: [-2.78, 0, 0.44], yaw: -0.5 },
-  2: { pos: [2.78, 0, 0.44], yaw: 0.5 },
-  3: { pos: [-1.72, 0, -2.52], yaw: -1.0 },
-  4: { pos: [1.72, 0, -2.52], yaw: 1.0 },
+const TABLE_SEAT_BY_ID: Record<number, { pos: [number, number, number] }> = {
+  0: { pos: [0, 0, -2.55] },
+  1: { pos: [-2.78, 0, 0.44] },
+  2: { pos: [2.78, 0, 0.44] },
+  3: { pos: [-1.72, 0, -2.52] },
+  4: { pos: [1.72, 0, -2.52] },
 };
+
+/** 내 턴에서 이 시간 동안 내지/패스하지 않으면 재촉 */
+const TURN_STALL_NAG_SEC = 30;
 
 function SceneContent({
   players,
@@ -1203,23 +1395,245 @@ function SceneContent({
   const aiPlayers = useMemo(() => players.filter((p) => p.isAI), [players]);
 
   const seats = useMemo(() => {
-    const make = (
-      player: LexioPlayer,
-      pos: [number, number, number],
-      yaw: number,
-    ) => ({
+    const make = (player: LexioPlayer, pos: [number, number, number]) => ({
       player,
       pos,
-      yaw,
       cardYaw: Math.atan2(pos[0], pos[2]),
     });
     return aiPlayers.map((p) => {
       const cfg = TABLE_SEAT_BY_ID[p.id] ?? TABLE_SEAT_BY_ID[1];
-      return make(p, cfg.pos, cfg.yaw);
+      return make(p, cfg.pos);
     });
   }, [aiPlayers]);
 
   const reveal = phase === 'finished';
+
+  const prevPlaySigRef = useRef<string | null>(null);
+  const reactionSeqRef = useRef(0);
+  const turnEpochRef = useRef(0);
+  const prevPassSigRef = useRef('');
+  const prevTurnIdxRef = useRef(currentPlayerIdx);
+  const reactionGateRef = useRef(createReactionGateState());
+  const [tableReaction, setTableReaction] =
+    useState<LexioOpponentReactionSignal | null>(null);
+  const [passReaction, setPassReaction] =
+    useState<LexioOpponentReactionSignal | null>(null);
+  const [turnReaction, setTurnReaction] =
+    useState<LexioOpponentReactionSignal | null>(null);
+  const [stallReaction, setStallReaction] =
+    useState<LexioOpponentReactionSignal | null>(null);
+  const [idleLookReaction, setIdleLookReaction] =
+    useState<LexioOpponentReactionSignal | null>(null);
+
+  const turnActivityKey = useMemo(() => {
+    const passFlags = players.map((p) => (p.passed ? '1' : '0')).join('');
+    return `${currentPlayerIdx}|${comboPlaySignature(currentPlay) ?? '-'}|${passFlags}`;
+  }, [currentPlayerIdx, currentPlay, players]);
+
+  useEffect(() => {
+    const sig = comboPlaySignature(currentPlay);
+    if (
+      prevPlaySigRef.current !== null &&
+      sig &&
+      sig !== prevPlaySigRef.current &&
+      (phase === 'playing' || phase === 'finished')
+    ) {
+      if (!currentPlay) return;
+      reactionSeqRef.current += 1;
+      const seq = reactionSeqRef.current;
+      const gate = reactionGateRef.current;
+      if (!canEmitEventReaction(gate)) return;
+
+      const clip = tableReactionClipForCombo(currentPlay, seq);
+      if (!clip) return;
+      if (currentPlay.type === 'single' && !shouldReactToSingle(seq)) return;
+
+      markEventReaction(gate);
+      const lastPlayerIdx =
+        (currentPlayerIdx - 1 + players.length) % players.length;
+      const lastPlayer = players[lastPlayerIdx];
+      const speakerId = pickAiReactionSpeaker(
+        aiPlayers,
+        lastPlayer?.id,
+        seq,
+      );
+      setTableReaction({
+        id: seq,
+        clip,
+        targetPlayerId: speakerId,
+      });
+      const voiceLine = voiceLineForCombo(currentPlay);
+      if (voiceLine) playLexioVoice(voiceLine);
+    }
+    prevPlaySigRef.current = sig;
+  }, [currentPlay, phase, players, currentPlayerIdx, aiPlayers]);
+
+  useEffect(() => {
+    if (phase !== 'playing') {
+      setPassReaction(null);
+      prevPassSigRef.current = '';
+      return;
+    }
+
+    const sig = players.map((p) => `${p.id}:${p.passed ? 1 : 0}`).join('|');
+    if (prevPassSigRef.current && sig !== prevPassSigRef.current) {
+      for (const p of players) {
+        const prev = prevPassSigRef.current
+          .split('|')
+          .find((entry) => entry.startsWith(`${p.id}:`));
+        const wasPassed = prev?.endsWith(':1');
+        if (p.passed && !wasPassed) {
+          reactionSeqRef.current += 1;
+          const seq = reactionSeqRef.current;
+          const gate = reactionGateRef.current;
+          if (
+            !shouldReactToPass(seq) ||
+            !canEmitPassReaction(gate)
+          ) {
+            break;
+          }
+          const responders = aiPlayers.filter((ai) => ai.id !== p.id);
+          if (responders.length > 0) {
+            const speaker =
+              responders[(p.id + currentPlayerIdx) % responders.length]!;
+            markPassReaction(gate);
+            setPassReaction({
+              id: seq,
+              clip: passReactionClip(seq),
+              targetPlayerId: speaker.id,
+            });
+          }
+          break;
+        }
+      }
+    }
+    prevPassSigRef.current = sig;
+  }, [players, phase, aiPlayers, currentPlayerIdx]);
+
+  useEffect(() => {
+    if (phase !== 'playing') {
+      setTurnReaction(null);
+      prevTurnIdxRef.current = currentPlayerIdx;
+      return;
+    }
+
+    if (prevTurnIdxRef.current !== currentPlayerIdx) {
+      const current = players[currentPlayerIdx];
+      if (current?.isAI && !currentPlay && !current.passed) {
+        reactionSeqRef.current += 1;
+        const seq = reactionSeqRef.current;
+        const gate = reactionGateRef.current;
+        if (shouldAiTurnPoint(seq) && canEmitEventReaction(gate)) {
+          markEventReaction(gate);
+          setTurnReaction({
+            id: seq,
+            clip: 'sitting-pointing',
+            targetPlayerId: current.id,
+          });
+        } else {
+          setTurnReaction(null);
+        }
+      } else {
+        setTurnReaction(null);
+      }
+    }
+    prevTurnIdxRef.current = currentPlayerIdx;
+  }, [currentPlayerIdx, currentPlay, phase, players]);
+
+  useEffect(() => {
+    if (phase !== 'playing') {
+      stopLexioVoice();
+      setStallReaction(null);
+      return;
+    }
+
+    const current = players[currentPlayerIdx];
+    const isHumanTurn =
+      !!humanPlayer && !!current && !current.isAI && current.id === humanPlayer.id;
+    if (!isHumanTurn) {
+      setStallReaction(null);
+      return;
+    }
+
+    turnEpochRef.current += 1;
+    const epoch = turnEpochRef.current;
+
+    const timer = window.setTimeout(() => {
+      if (epoch !== turnEpochRef.current) return;
+
+      const stillCurrent = players[currentPlayerIdx];
+      if (
+        !humanPlayer ||
+        !stillCurrent ||
+        stillCurrent.isAI ||
+        stillCurrent.id !== humanPlayer.id
+      ) {
+        return;
+      }
+
+      reactionSeqRef.current += 1;
+      const seq = reactionSeqRef.current;
+      const gate = reactionGateRef.current;
+      if (!canEmitEventReaction(gate)) return;
+
+      markEventReaction(gate);
+      const speakerId = pickAiReactionSpeaker(
+        aiPlayers,
+        humanPlayer.id,
+        seq,
+      );
+      setStallReaction({
+        id: seq,
+        clip: stallReactionClip(seq),
+        targetPlayerId: speakerId,
+      });
+      playLexioVoice('stallNag');
+    }, TURN_STALL_NAG_SEC * 1000);
+
+    return () => {
+      window.clearTimeout(timer);
+      setStallReaction(null);
+    };
+  }, [turnActivityKey, phase, players, currentPlayerIdx, humanPlayer, aiPlayers]);
+
+  useEffect(() => {
+    if (phase !== 'playing') {
+      setIdleLookReaction(null);
+      return;
+    }
+
+    let cancelled = false;
+    let timer = 0;
+
+    const schedule = () => {
+      timer = window.setTimeout(() => {
+        if (cancelled) return;
+
+        const now = Date.now();
+        const gate = reactionGateRef.current;
+        if (canEmitIdleReaction(gate, now)) {
+          reactionSeqRef.current += 1;
+          const seq = reactionSeqRef.current;
+          markIdleReaction(gate, now);
+          setIdleLookReaction({
+            id: seq,
+            clip: pickIdleReactionClip(seq),
+            targetPlayerId: pickAiReactionSpeaker(aiPlayers, undefined, seq),
+          });
+        }
+
+        schedule();
+      }, REACTION_COOLDOWN.idleIntervalSec * 1000);
+    };
+
+    schedule();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      setIdleLookReaction(null);
+    };
+  }, [turnActivityKey, phase, aiPlayers]);
 
   const humanFinishCoins = useMemo(() => {
     if (!finishTableUi || !humanPlayer) return null;
@@ -1261,21 +1675,20 @@ function SceneContent({
       >
         <object3D attach="target" position={[0, HAND_GROUP_Y, HAND_TABLE_Z]} />
       </directionalLight>
-      <pointLight position={[0, 5.5, 3.2]} intensity={0.14} color="#c4b5fd" />
+      <pointLight position={[0, 5.5 + SCENE_PLAYFIELD_LIFT_Y, 3.2]} intensity={0.14} color="#c4b5fd" />
 
       <TableRoom />
       <DiscardPile3D placements={discardPlacements} />
       {/** 진행 중·종료 후: 테이블 중앙 마지막 조합(승리 직전 내기) 유지 */}
       <CenterPlay3D combo={currentPlay} flatOnTable={phase === 'finished'} />
 
-      {seats.map(({ player, pos, yaw, cardYaw }) => {
+      {seats.map(({ player, pos, cardYaw }) => {
         const idx = players.findIndex((p) => p.id === player.id);
         return (
           <OpponentSeat
             key={player.id}
             player={player}
             seatPosition={pos}
-            faceYaw={yaw}
             cardYaw={cardYaw}
             isActive={idx === currentPlayerIdx && phase === 'playing'}
             showPass={player.passed}
@@ -1285,6 +1698,13 @@ function SceneContent({
               null
             }
             sessionCoins={sessionCoinsByPlayerId[player.id] ?? 0}
+            characterReaction={pickSeatCharacterReaction(player.id, {
+              table: tableReaction,
+              turn: turnReaction,
+              pass: passReaction,
+              stall: stallReaction,
+              idleLook: idleLookReaction,
+            })}
           />
         );
       })}
@@ -1348,7 +1768,10 @@ function FirstPersonCameraRig({
   const onIntroCompleteRef = useRef(onStartIntroComplete);
   onIntroCompleteRef.current = onStartIntroComplete;
 
-  const camPos0 = useMemo(() => new THREE.Vector3(0, 3.24, 4.55), []);
+  const camPos0 = useMemo(
+    () => new THREE.Vector3(0, 3.24 + SCENE_PLAYFIELD_LIFT_Y, 4.55),
+    [],
+  );
   const camEndRadius = useMemo(
     () => Math.hypot(camPos0.x, camPos0.z),
     [camPos0],
@@ -1358,8 +1781,14 @@ function FirstPersonCameraRig({
     [camPos0],
   );
   /** 판 종료 시 탑다운 카메라 위치(lerp 끝점) */
-  const camPos1 = useMemo(() => new THREE.Vector3(0, 5.38, 0.24), []);
-  const look0 = useMemo(() => new THREE.Vector3(0, 0.52, -0.12), []);
+  const camPos1 = useMemo(
+    () => new THREE.Vector3(0, 5.38 + SCENE_PLAYFIELD_LIFT_Y, 0.24),
+    [],
+  );
+  const look0 = useMemo(
+    () => new THREE.Vector3(0, 0.52 + SCENE_PLAYFIELD_LIFT_Y, -0.12),
+    [],
+  );
   const look1 = useMemo(
     () => new THREE.Vector3(0, TABLE_TOP_Y + 0.02, 0),
     [],
@@ -1373,7 +1802,7 @@ function FirstPersonCameraRig({
     () => camEndAngle + START_INTRO_ROTATION,
     [camEndAngle],
   );
-  const introStartHeight = 7.85;
+  const introStartHeight = 7.85 + SCENE_PLAYFIELD_LIFT_Y;
   const introStartRadius = 0.35;
 
   useEffect(() => {
@@ -1498,7 +1927,7 @@ export default function LexioFirstPersonScene({
   return (
     <Canvas
       shadows
-      camera={{ fov: 54, near: 0.08, far: 80, position: [0, 3.24, 4.55] }}
+      camera={{ fov: 54, near: 0.08, far: 80, position: [0, 3.24 + SCENE_PLAYFIELD_LIFT_Y, 4.55] }}
       gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, localClippingEnabled: true }}
       className="h-full w-full touch-none"
     >

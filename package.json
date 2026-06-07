@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "convert:models": "node scripts/convert-fbx-to-glb.mjs"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "1.2.3",
@@ -63,6 +64,7 @@
     "@tailwindcss/vite": "4.1.12",
     "@types/three": "^0.160.0",
     "@vitejs/plugin-react": "4.7.0",
+    "fbx2gltf": "^0.9.7-p1",
     "tailwindcss": "4.1.12",
     "vite": "6.3.5"
   }
