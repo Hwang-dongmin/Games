@@ -34,6 +34,10 @@ export function setLexioSfxMuted(muted: boolean): void {
     if (muted) m.stopLexioBgm();
     else m.applyLexioBgmGain();
   });
+  import('./homeBgm').then((m) => {
+    if (muted) m.stopHomeBgm();
+    else m.applyHomeBgmGain();
+  });
 }
 
 export function getLexioSfxVolume(): number {
@@ -51,6 +55,7 @@ export function setLexioSfxVolume(volume: number): void {
   window.localStorage.setItem(VOLUME_KEY, String(v));
   applyLexioSfxSettings();
   import('./lexioBgm').then((m) => m.applyLexioBgmGain());
+  import('./homeBgm').then((m) => m.applyHomeBgmGain());
 }
 
 function syncMasterGain(ctx: AudioContext): void {

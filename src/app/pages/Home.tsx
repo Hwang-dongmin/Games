@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Gamepad2 } from 'lucide-react';
 import GameHomeCard from '../components/GameHomeCard';
+import HomeSfxToggle from '../components/HomeSfxToggle';
 import PlayModeToggle from '../components/PlayModeToggle';
 import {
   getGamePath,
   getGamesForMode,
   type PlayMode,
 } from '../data/games';
+import { startHomeBgm, stopHomeBgm } from '../utils/homeBgm';
+import { isLexioSfxMuted, unlockLexioAudio } from '../utils/lexioSounds';
 
 const gridClassByMode: Record<PlayMode, string> = {
   offline: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4',
@@ -16,6 +19,17 @@ const gridClassByMode: Record<PlayMode, string> = {
 export default function Home() {
   const [mode, setMode] = useState<PlayMode>('offline');
   const visibleGames = getGamesForMode(mode);
+
+  useEffect(() => {
+    const onPointerDown = () => {
+      unlockLexioAudio();
+      if (!isLexioSfxMuted()) startHomeBgm();
+    };
+    window.addEventListener('pointerdown', onPointerDown, { once: true });
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, []);
+
+  useEffect(() => () => stopHomeBgm(), []);
 
   return (
     <div className="home-page relative min-h-screen overflow-hidden bg-[#08070e]">
@@ -36,7 +50,10 @@ export default function Home() {
             </h1>
           </div>
 
-          <PlayModeToggle mode={mode} onChange={setMode} />
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <HomeSfxToggle />
+            <PlayModeToggle mode={mode} onChange={setMode} />
+          </div>
         </div>
       </header>
 
