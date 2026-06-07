@@ -18,16 +18,10 @@ import {
   BookOpen,
   ChevronLeft,
 } from 'lucide-react';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../components/ui/select';
 import LexioFirstPersonScene from './LexioFirstPersonScene';
 import LexioOnlineWelcomeOverlay from './LexioOnlineWelcomeOverlay';
 import LexioRulesModal from './LexioRulesModal';
+import LexioLobbyPlayerList from './LexioLobbyPlayerList';
 import LexioSessionRankingPanel from './LexioSessionRankingPanel';
 import { beats, comboKorean, detectCombo, aiFindMove, aiLeadFallbackTile } from '../../utils/lexio';
 import {
@@ -1000,88 +994,38 @@ export default function LexioOnline() {
               </div>
             )}
 
-            <h3 className="text-base font-semibold text-purple-200 mb-3 flex items-center gap-2">
-              <Users className="w-5 h-5" />
-              대기 중인 플레이어
-            </h3>
-            <ul className="space-y-2 mb-6">
-              {lobbyPlayers.map((p) => (
-                <li
-                  key={p.peerId}
-                  className="flex items-center justify-between rounded-lg bg-black/25 px-4 py-2.5 text-base"
-                >
-                  <span>
-                    {p.nickname}
-                    {p.seat === 0 && isHost && p.peerId === myPeerIdRef.current && (
-                      <span className="ml-2 text-sm text-amber-300/90">
-                        (나 · 호스트)
-                      </span>
-                    )}
-                    {p.seat === 0 && !(p.peerId === myPeerIdRef.current) && (
-                      <span className="ml-2 text-sm text-amber-300/90">
-                        호스트
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-purple-400/60 text-sm">
-                    #{p.seat + 1}
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <LexioLobbyPlayerList
+              players={lobbyPlayers}
+              maxPlayers={lobbySettings.maxPlayers}
+              minPlayers={MIN_ONLINE_PLAYERS}
+              myPeerId={myPeerIdRef.current}
+              isHost={isHost}
+              onMaxPlayersChange={(next) =>
+                updateHostSettings({ maxPlayers: next })
+              }
+            />
 
             {isHost && (
-              <div className="space-y-4 mb-6 border-t border-purple-500/20 pt-4">
-                <div>
-                  <label className="text-sm text-purple-200/80">
-                    총 라운드 수 (최대 {MAX_SESSION_ROUNDS})
-                  </label>
-                  <div className="flex items-center gap-4 mt-1">
-                    <input
-                      type="range"
-                      min={1}
-                      max={MAX_SESSION_ROUNDS}
-                      value={lobbySettings.totalRounds}
-                      onChange={(e) =>
-                        updateHostSettings({
-                          totalRounds: Number(e.target.value),
-                        })
-                      }
-                      className="flex-1 accent-purple-400"
-                    />
-                    <span className="font-mono text-base w-10 text-right">
-                      {lobbySettings.totalRounds}
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm text-purple-200/80">
-                    최대 인원 ({MIN_ONLINE_PLAYERS}~{MAX_ONLINE_PLAYERS})
-                  </label>
-                  <Select
-                    value={String(lobbySettings.maxPlayers)}
-                    onValueChange={(value) =>
-                      updateHostSettings({ maxPlayers: Number(value) })
+              <div className="mb-6 border-t border-purple-500/20 pt-4">
+                <label className="text-sm text-purple-200/80">
+                  총 라운드 수 (최대 {MAX_SESSION_ROUNDS})
+                </label>
+                <div className="mt-1 flex items-center gap-4">
+                  <input
+                    type="range"
+                    min={1}
+                    max={MAX_SESSION_ROUNDS}
+                    value={lobbySettings.totalRounds}
+                    onChange={(e) =>
+                      updateHostSettings({
+                        totalRounds: Number(e.target.value),
+                      })
                     }
-                  >
-                    <SelectTrigger className="mt-1 h-auto w-full rounded-lg border-purple-500/40 bg-black/30 py-2.5 text-base text-purple-100 shadow-none focus-visible:border-purple-400/70 focus-visible:ring-2 focus-visible:ring-purple-500/30 dark:border-purple-500/40 dark:bg-black/30 dark:hover:bg-black/40 [&_svg]:text-purple-300/80">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent
-                      position="popper"
-                      className="border-purple-500/40 bg-[#1e1b4b] text-purple-100 shadow-xl shadow-black/50"
-                    >
-                      {[3, 4, 5].map((n) => (
-                        <SelectItem
-                          key={n}
-                          value={String(n)}
-                          className="cursor-pointer text-base text-purple-100 focus:bg-purple-500/30 focus:text-purple-50 data-[highlighted]:bg-purple-500/30 data-[highlighted]:text-purple-50"
-                        >
-                          {n}명
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    className="flex-1 accent-purple-400"
+                  />
+                  <span className="w-10 text-right font-mono text-base">
+                    {lobbySettings.totalRounds}
+                  </span>
                 </div>
               </div>
             )}
