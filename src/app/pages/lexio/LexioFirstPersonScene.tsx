@@ -53,11 +53,6 @@ import {
   markPassReaction,
   REACTION_COOLDOWN,
 } from '../../utils/lexioReactionGate';
-import {
-  playLexioVoice,
-  stopLexioVoice,
-  voiceLineForCombo,
-} from '../../utils/lexioVoice';
 import { LexioOpponentCharacter3D } from '../../components/lexio/LexioOpponentCharacter3D';
 import { lexioOpponentCharacterForPlayerId, LEXIO_OPPONENT_CHARACTERS } from '../../utils/lexioCharacterReactions';
 import {
@@ -1462,8 +1457,6 @@ function SceneContent({
         clip,
         targetPlayerId: speakerId,
       });
-      const voiceLine = voiceLineForCombo(currentPlay);
-      if (voiceLine) playLexioVoice(voiceLine);
     }
     prevPlaySigRef.current = sig;
   }, [currentPlay, phase, players, currentPlayerIdx, aiPlayers]);
@@ -1542,7 +1535,6 @@ function SceneContent({
 
   useEffect(() => {
     if (phase !== 'playing') {
-      stopLexioVoice();
       setStallReaction(null);
       return;
     }
@@ -1587,7 +1579,6 @@ function SceneContent({
         clip: stallReactionClip(seq),
         targetPlayerId: speakerId,
       });
-      playLexioVoice('stallNag');
     }, TURN_STALL_NAG_SEC * 1000);
 
     return () => {
