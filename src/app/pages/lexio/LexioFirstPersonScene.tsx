@@ -7,7 +7,11 @@ import React, {
   useState,
 } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { layoutHandTiles3D } from '../../utils/lexioHandLayout';
+import {
+  layoutHandTiles3D,
+  layoutOpponentHandSlots3D,
+  layoutOpponentHandTiles3D,
+} from '../../utils/lexioHandLayout';
 import { LEXIO_CENTER_PLAY_TABLE_Z } from '../../utils/lexioTableLayout';
 import {
   discardTileContactGroupY,
@@ -205,19 +209,25 @@ const TILE_FLAT_Y =
   }) +
   TABLE_SURFACE_EPS;
 
-const OPPONENT_BACK_W = TILE_W * 0.6;
-const OPPONENT_BACK_H = TILE_H * 0.6;
-/** 좌석→테이블 안쪽 오프셋 (작을수록 플레이어 시점에 가깝게) */
-const OPPONENT_HAND_Z = -0.92;
-const OPPONENT_BACK_GEOM = getRoundedTileGeometry(
-  OPPONENT_BACK_W,
-  OPPONENT_BACK_H,
+/** 상대·AI 손패 — 기존(0.6) 대비 살짝 작게. 내 패(1.0)와 무관 */
+const OPPONENT_TILE_SCALE = 0.56;
+const OPPONENT_TILE_W = TILE_W * OPPONENT_TILE_SCALE;
+const OPPONENT_TILE_H = TILE_H * OPPONENT_TILE_SCALE;
+/** 기존 상대 패 간격(TILE_W×0.78) 유지 — 카드만 줄이고 간격은 그대로 */
+const OPPONENT_HAND_GAP = TILE_W * 0.78;
+const OPPONENT_HAND_ROW_FRONT_Z = 0.16;
+const OPPONENT_HAND_ROW_BACK_Z = -0.07;
+const OPPONENT_TILE_GEOM = getRoundedTileGeometry(
+  OPPONENT_TILE_W,
+  OPPONENT_TILE_H,
   TILE_T,
 );
+/** 좌석→테이블 안쪽 오프셋 (작을수록 플레이어 시점에 가깝게) */
+const OPPONENT_HAND_Z = -0.92;
 
 function opponentHandGroupY(cardYaw: number): number {
   return solveGroupYOnTable(
-    OPPONENT_BACK_GEOM,
+    OPPONENT_TILE_GEOM,
     OPPONENT_HAND_Z,
     cardYaw,
   );
@@ -295,6 +305,7 @@ function LexioTile3D({
   rowLayer = 'single',
   faceMode = 'mesh',
   liftAxis = 'y',
+  tileScale = 1,
 }: {
   tile: LexioTile;
   position: [number, number, number];
@@ -312,7 +323,20 @@ function LexioTile3D({
   faceMode?: 'html' | 'mesh';
   /** 호버·선택 lift 축 (기본 Y) */
   liftAxis?: 'y' | 'z';
+  /** 1=플레이어 손패, OPPONENT_TILE_SCALE=상대·AI(기존 0.6 대비) */
+  tileScale?: number;
 }) {
+  const tileW = TILE_W * tileScale;
+  const tileH = TILE_H * tileScale;
+  const faceW = TILE_FACE_W * tileScale;
+  const faceH = TILE_FACE_H * tileScale;
+  const tileGeom = useMemo(
+    () =>
+      tileScale === 1
+        ? LEXIO_TILE_ROUNDED_GEOM
+        : getRoundedTileGeometry(tileW, tileH, TILE_T),
+    [tileScale, tileW, tileH],
+  );
   const groupRef = useRef<THREE.Group>(null);
   const liftSmoothed = useRef(0);
   const [hovered, setHovered] = useState(false);
@@ -375,7 +399,7 @@ function LexioTile3D({
       <mesh
         castShadow
         receiveShadow
-        geometry={LEXIO_TILE_ROUNDED_GEOM}
+        geometry={tileGeom}
         renderOrder={meshOrder}
       >
         <meshStandardMaterial
@@ -411,7 +435,7 @@ function LexioTile3D({
             setHover(false);
           }}
         >
-          <planeGeometry args={[TILE_W * 1.1, TILE_H * 1.55]} />
+          <planeGeometry args={[tileW * 1.1, tileH * 1.55]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
       )}
@@ -420,8 +444,8 @@ function LexioTile3D({
           <LexioPlayCardFace3D
             number={tile.number}
             suit={suit}
-            width={TILE_FACE_W}
-            height={TILE_FACE_H}
+            width={faceW}
+            height={faceH}
             isHovered={cardHovered}
             renderOrder={meshOrder + 1}
           />
@@ -487,14 +511,14 @@ function LexioTile3D({
 function TileBack3D({
   position,
   rotation,
-  small,
+  tileScale = 0.85,
 }: {
   position: [number, number, number];
   rotation?: [number, number, number];
-  small?: boolean;
+  tileScale?: number;
 }) {
-  const w = small ? TILE_W * 0.6 : TILE_W * 0.85;
-  const h = small ? TILE_H * 0.6 : TILE_H * 0.85;
+  const w = TILE_W * tileScale;
+  const h = TILE_H * tileScale;
   const backGeom = useMemo(
     () => getRoundedTileGeometry(w, h, TILE_T),
     [w, h],
@@ -652,12 +676,19 @@ function OpponentRevealAnimated({
   const t0Ref = useRef<number | null>(null);
   const tileIds = tiles.map((t) => t.id).join(',');
 
-  const revealGap = TILE_W * 1;
-  const revealTotal = Math.max(0, (tiles.length - 1) * revealGap);
+  const revealPlacements = useMemo(
+    () =>
+      layoutOpponentHandTiles3D(tiles, {
+        gap: OPPONENT_HAND_GAP,
+        frontRowZ: OPPONENT_HAND_ROW_FRONT_Z,
+        backRowZ: OPPONENT_HAND_ROW_BACK_Z,
+      }),
+    [tileIds],
+  );
 
   const pStart = useMemo(() => {
     const y = solveGroupYOnTable(
-      LEXIO_TILE_ROUNDED_GEOM,
+      OPPONENT_TILE_GEOM,
       OPPONENT_HAND_Z,
       cardYaw,
     );
@@ -711,11 +742,13 @@ function OpponentRevealAnimated({
 
   return (
     <group ref={groupRef}>
-      {tiles.map((tile, i) => (
+      {revealPlacements.map(({ tile, position, rowLayer }) => (
         <LexioTile3D
           key={tile.id}
           tile={tile}
-          position={[-revealTotal / 2 + i * revealGap, 0, 0]}
+          position={position}
+          rowLayer={rowLayer}
+          tileScale={OPPONENT_TILE_SCALE}
           facePointerHover={false}
           faceMode="mesh"
           finishReveal
@@ -724,7 +757,7 @@ function OpponentRevealAnimated({
       <FinishHandHudBillboard
         handCount={finishHud.handCount}
         roundEarned={finishHud.roundEarned}
-        position={[0, TILE_H * 0.62 + 0.14, 0.06]}
+        position={[0, OPPONENT_TILE_H * 0.62 + 0.14, 0.06]}
       />
     </group>
   );
@@ -847,9 +880,15 @@ function OpponentSeat({
   sessionCoins: number;
 }) {
   const handCount = player.hand.length;
-  const backCount = Math.min(handCount, 14);
-  const backGap = TILE_W * 0.78;
-  const backTotal = (backCount - 1) * backGap;
+  const backSlots = useMemo(
+    () =>
+      layoutOpponentHandSlots3D(handCount, {
+        gap: OPPONENT_HAND_GAP,
+        frontRowZ: OPPONENT_HAND_ROW_FRONT_Z,
+        backRowZ: OPPONENT_HAND_ROW_BACK_Z,
+      }),
+    [handCount],
+  );
   const opponentHandY = useMemo(
     () => opponentHandGroupY(cardYaw),
     [cardYaw],
@@ -946,13 +985,26 @@ function OpponentSeat({
             position={[0, opponentHandY, OPPONENT_HAND_Z]}
             rotation={[TILT_BACK, 0, 0]}
           >
-            {Array.from({ length: backCount }).map((_, i) => (
-              <TileBack3D
-                key={i}
-                position={[-backTotal / 2 + i * backGap, 0, 0]}
-                small
-              />
-            ))}
+            {backSlots
+              .filter((s) => s.rowLayer === 'back')
+              .map((slot, i) => (
+                <TileBack3D
+                  key={`back-${i}`}
+                  position={slot.position}
+                  tileScale={OPPONENT_TILE_SCALE}
+                />
+              ))}
+            {backSlots
+              .filter(
+                (s) => s.rowLayer === 'front' || s.rowLayer === 'single',
+              )
+              .map((slot, i) => (
+                <TileBack3D
+                  key={`front-${i}`}
+                  position={slot.position}
+                  tileScale={OPPONENT_TILE_SCALE}
+                />
+              ))}
           </group>
         </group>
       )}

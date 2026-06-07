@@ -42,6 +42,108 @@ export type HandTilePlacement = {
   rowLayer: HandRowLayer;
 };
 
+export type HandSlotPlacement = {
+  position: [number, number, number];
+  rowLayer: HandRowLayer;
+};
+
+/** 상대·AI 손패 — 한 줄당 최대 장수 */
+export const OPPONENT_MAX_CARDS_PER_ROW = 6;
+
+/** 상대 손패를 1줄 또는 2줄로 나눔 — 앞줄 최대 maxPerRow장, 나머지는 뒤줄 */
+export function splitCountIntoOpponentRows(
+  count: number,
+  maxPerRow = OPPONENT_MAX_CARDS_PER_ROW,
+): [number, number] {
+  if (count <= maxPerRow) return [count, 0];
+  return [maxPerRow, count - maxPerRow];
+}
+
+function placeOpponentHandRowSlots(
+  rowCount: number,
+  gap: number,
+  z: number,
+  rowLayer: HandRowLayer,
+): HandSlotPlacement[] {
+  if (rowCount <= 0) return [];
+  const total = (rowCount - 1) * gap;
+  return Array.from({ length: rowCount }, (_, i) => ({
+    position: [-total / 2 + i * gap, 0, z] as [number, number, number],
+    rowLayer,
+  }));
+}
+
+/** 상대 손패 뒷면 슬롯 — 줄당 최대 6장, 1줄 또는 2줄 */
+export function layoutOpponentHandSlots3D(
+  count: number,
+  options: {
+    gap: number;
+    /** 플레이어(카메라) 쪽 줄 */
+    frontRowZ?: number;
+    /** 테이블 중앙 쪽 줄 */
+    backRowZ?: number;
+  },
+): HandSlotPlacement[] {
+  const { gap, frontRowZ = 0.18, backRowZ = -0.08 } = options;
+  const [backCount, frontCount] = splitCountIntoOpponentRows(count);
+  if (frontCount === 0) {
+    return placeOpponentHandRowSlots(backCount, gap, 0, 'single');
+  }
+  return [
+    ...placeOpponentHandRowSlots(backCount, gap, backRowZ, 'back'),
+    ...placeOpponentHandRowSlots(frontCount, gap, frontRowZ, 'front'),
+  ];
+}
+
+/** 상대·AI 손패 앞면 — 줄당 최대 6장, 1줄 또는 2줄 */
+export function layoutOpponentHandTiles3D(
+  tiles: LexioTile[],
+  options: {
+    gap: number;
+    frontRowZ?: number;
+    backRowZ?: number;
+  },
+): HandTilePlacement[] {
+  const { gap, frontRowZ = 0.18, backRowZ = -0.08 } = options;
+  const n = tiles.length;
+  if (n === 0) return [];
+
+  const [backCount, frontCount] = splitCountIntoOpponentRows(n);
+  if (frontCount === 0) {
+    const total = (backCount - 1) * gap;
+    return tiles.map((tile, i) => ({
+      tile,
+      position: [-total / 2 + i * gap, 0, 0] as [number, number, number],
+      rowLayer: 'single' as const,
+    }));
+  }
+
+  const backTiles = tiles.slice(0, backCount);
+  const frontTiles = tiles.slice(backCount);
+  const placements: HandTilePlacement[] = [];
+
+  const placeRow = (
+    rowTiles: LexioTile[],
+    z: number,
+    rowLayer: 'back' | 'front',
+  ) => {
+    if (rowTiles.length === 0) return;
+    const total = (rowTiles.length - 1) * gap;
+    rowTiles.forEach((tile, i) => {
+      placements.push({
+        tile,
+        position: [-total / 2 + i * gap, 0, z],
+        rowLayer,
+      });
+    });
+  };
+
+  placeRow(backTiles, backRowZ, 'back');
+  placeRow(frontTiles, frontRowZ, 'front');
+
+  return placements;
+}
+
 /**
  * 손패 3D 배치 — 좁은 화면이면 2줄(숫자 그룹 단위), 아니면 1줄.
  */
