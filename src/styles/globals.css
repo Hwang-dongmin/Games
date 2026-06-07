@@ -36,7 +36,7 @@
 @keyframes homeGameGridIn {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(12px);
   }
   to {
     opacity: 1;
@@ -44,8 +44,137 @@
   }
 }
 
+@keyframes homeCardIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes homeBlobDrift {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(18px, -24px) scale(1.08);
+  }
+}
+
+@keyframes homeCardSheen {
+  0% {
+    transform: translateX(-130%) skewX(-14deg);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translateX(230%) skewX(-14deg);
+    opacity: 0;
+  }
+}
+
+.home-page-ambient {
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 0%, rgba(124, 58, 237, 0.14), transparent 70%),
+    radial-gradient(ellipse 50% 35% at 100% 60%, rgba(99, 102, 241, 0.08), transparent 65%);
+}
+
+.home-page-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(72px);
+  animation: homeBlobDrift 14s ease-in-out infinite;
+}
+
+.home-page-blob-a {
+  top: -8%;
+  left: 18%;
+  width: 340px;
+  height: 340px;
+  background: rgba(139, 92, 246, 0.2);
+}
+
+.home-page-blob-b {
+  top: 38%;
+  right: -6%;
+  width: 380px;
+  height: 380px;
+  background: rgba(217, 70, 239, 0.1);
+  animation-delay: -5s;
+  animation-duration: 18s;
+}
+
+.home-page-blob-c {
+  bottom: 4%;
+  left: 32%;
+  width: 260px;
+  height: 260px;
+  background: rgba(59, 130, 246, 0.08);
+  animation-delay: -9s;
+  animation-duration: 16s;
+}
+
+.home-title {
+  background: linear-gradient(135deg, #ffffff 20%, #ddd6fe 70%, #c4b5fd 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
 .home-game-grid {
   animation: homeGameGridIn 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.home-game-card {
+  animation: homeCardIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--card-index, 0) * 60ms + 40ms);
+  transition:
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow:
+    0 4px 24px -8px rgba(0, 0, 0, 0.55),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.07);
+}
+
+.home-game-card:hover {
+  transform: translateY(-8px) scale(1.02);
+  box-shadow:
+    0 28px 56px -16px rgba(var(--card-glow, 139, 92, 246), 0.42),
+    0 0 0 1px rgba(255, 255, 255, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.home-game-card-border {
+  z-index: 2;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  transition: box-shadow 0.4s ease;
+}
+
+.home-game-card:hover .home-game-card-border {
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.home-game-card-sheen {
+  z-index: 1;
+  background: linear-gradient(
+    105deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.14) 50%,
+    transparent 62%
+  );
+  opacity: 0;
+}
+
+.home-game-card:hover .home-game-card-sheen {
+  animation: homeCardSheen 0.85s ease-out;
 }
 
 @keyframes lexioMenuFadeIn {

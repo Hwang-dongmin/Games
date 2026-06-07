@@ -25,7 +25,7 @@ export const games: GameDefinition[] = [
     onlinePath: '/lexio/online',
     color: 'from-purple-600 to-indigo-700',
     image:
-      'https://images.unsplash.com/photo-1606503153255-59d8b8b82176?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+      'https://images.unsplash.com/photo-1742343886931-14ea96977531?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
     offline: true,
     online: true,
   },
@@ -61,7 +61,7 @@ export const games: GameDefinition[] = [
     offlinePath: '/snake',
     color: 'from-green-500 to-emerald-500',
     image:
-      'https://images.unsplash.com/photo-1567027757540-7b572280fa22?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxnYW1pbmclMjBjb250cm9sbGVyJTIwbmVvbnxlbnwxfHx8fDE3NzE4ODMxOTl8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
+      'https://images.unsplash.com/photo-1525799894461-3cfe39b72d69?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
     offline: true,
     online: false,
   },

@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { Link } from 'react-router';
 import type { GameDefinition } from '../data/games';
 import { ImageWithFallback } from './figma/ImageWithFallback';
@@ -5,54 +6,58 @@ import { ImageWithFallback } from './figma/ImageWithFallback';
 type GameHomeCardProps = {
   game: GameDefinition;
   to: string;
+  index?: number;
 };
 
-export default function GameHomeCard({ game, to }: GameHomeCardProps) {
-  const Icon = game.icon;
+const gameAccent: Record<string, { bar: string; glow: string }> = {
+  lexio: { bar: 'bg-violet-500', glow: '139, 92, 246' },
+  holdem: { bar: 'bg-amber-400', glow: '245, 158, 11' },
+  '2048': { bar: 'bg-orange-500', glow: '249, 115, 22' },
+  snake: { bar: 'bg-emerald-400', glow: '52, 211, 153' },
+};
+
+export default function GameHomeCard({ game, to, index = 0 }: GameHomeCardProps) {
+  const accent = gameAccent[game.id] ?? { bar: 'bg-white', glow: '255, 255, 255' };
 
   return (
     <Link
       to={to}
-      className="group relative overflow-hidden rounded-2xl border border-white/[0.12] bg-white/[0.06] backdrop-blur-sm transition-all duration-300 hover:border-white/25 hover:bg-white/[0.09] hover:shadow-xl hover:shadow-purple-500/15 active:scale-[0.99]"
+      className="home-game-card group relative flex min-h-[18rem] overflow-hidden rounded-2xl sm:min-h-[19.5rem]"
+      style={
+        {
+          '--card-index': index,
+          '--card-glow': accent.glow,
+        } as CSSProperties
+      }
     >
-      <div className="absolute inset-0 opacity-[0.18] transition-opacity duration-300 group-hover:opacity-[0.28]">
-        <ImageWithFallback
-          src={game.image}
-          alt={game.title}
-          className="w-full h-full object-cover"
-        />
+      <div className="home-game-card-border pointer-events-none absolute inset-0 rounded-2xl" aria-hidden />
+
+      <ImageWithFallback
+        src={game.image}
+        alt=""
+        className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"
+      />
+
+      <div
+        className={`absolute inset-0 bg-gradient-to-br ${game.color} opacity-35 transition-opacity duration-500 group-hover:opacity-50`}
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/45 to-black/5 transition-opacity duration-500 group-hover:from-black/90" />
+
+      <div className="home-game-card-sheen pointer-events-none absolute inset-0" aria-hidden />
+
+      <div className="relative mt-auto w-full p-5 sm:p-6">
+        <h3 className="text-xl font-bold tracking-tight text-white transition-all duration-300 group-hover:-translate-y-0.5 sm:text-[1.35rem]">
+          {game.title}
+        </h3>
+        <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-zinc-400 transition-colors duration-300 group-hover:text-zinc-300">
+          {game.description}
+        </p>
       </div>
 
       <div
-        className={`absolute inset-0 bg-gradient-to-br ${game.color} opacity-55 transition-opacity duration-300 group-hover:opacity-70`}
+        className={`absolute bottom-0 left-0 h-[3px] w-full origin-left scale-x-[0.35] ${accent.bar} transition-transform duration-500 ease-out group-hover:scale-x-100`}
+        aria-hidden
       />
-
-      <div className="relative flex h-full min-h-[13.5rem] flex-col p-6">
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-white/15 ring-1 ring-white/10 backdrop-blur-sm">
-          <Icon className="h-7 w-7 text-white" strokeWidth={2} />
-        </div>
-        <h3 className="mb-1.5 text-xl font-bold tracking-tight text-white sm:text-2xl">
-          {game.title}
-        </h3>
-        <p className="flex-grow text-sm leading-relaxed text-white/70">{game.description}</p>
-        <div className="mt-5 flex items-center text-sm font-medium text-white/90">
-          <span>플레이하기</span>
-          <svg
-            className="ml-1.5 h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            aria-hidden
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 5l7 7-7 7"
-            />
-          </svg>
-        </div>
-      </div>
     </Link>
   );
 }

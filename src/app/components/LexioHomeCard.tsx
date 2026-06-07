@@ -4,7 +4,7 @@ import { SplitModeHoverCard } from './ui/SplitModeHoverCard';
 import { useTouchPrimary } from './ui/use-mobile';
 
 const LEXIO_IMAGE =
-  'https://images.unsplash.com/photo-1606503153255-59d8b8b82176?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080';
+  'https://images.unsplash.com/photo-1742343886931-14ea96977531?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080';
 
 export default function LexioHomeCard() {
   const touchPrimary = useTouchPrimary();

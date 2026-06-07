@@ -9,8 +9,8 @@ import {
 } from '../data/games';
 
 const gridClassByMode: Record<PlayMode, string> = {
-  offline: 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-4',
-  online: 'grid-cols-1 max-w-sm mx-auto w-full',
+  offline: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4',
+  online: 'grid-cols-1 sm:max-w-sm sm:mx-auto w-full',
 };
 
 export default function Home() {
@@ -18,38 +18,39 @@ export default function Home() {
   const visibleGames = getGamesForMode(mode);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900">
-      <header className="sticky top-0 z-20 border-b border-white/[0.06] bg-slate-950/70 backdrop-blur-xl">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-5 py-5 sm:flex-row sm:items-center sm:justify-between sm:py-6">
-            <div className="flex min-w-0 items-center gap-3.5">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/25 to-fuchsia-500/15 ring-1 ring-white/10">
-                <Gamepad2 className="h-5 w-5 text-violet-300" strokeWidth={2.25} />
-              </div>
-              <div className="min-w-0">
-                <h1 className="truncate text-2xl font-bold tracking-tight text-white sm:text-[1.65rem]">
-                  게임 아케이드
-                </h1>
-              </div>
-            </div>
+    <div className="home-page relative min-h-screen overflow-hidden bg-[#08070e]">
+      <div className="home-page-ambient pointer-events-none absolute inset-0" aria-hidden>
+        <div className="home-page-blob home-page-blob-a" />
+        <div className="home-page-blob home-page-blob-b" />
+        <div className="home-page-blob home-page-blob-c" />
+      </div>
 
-            <div className="flex shrink-0 sm:justify-end">
-              <PlayModeToggle mode={mode} onChange={setMode} />
+      <header className="home-header relative z-10 border-b border-white/[0.07] bg-[#08070e]/80 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/25 to-fuchsia-600/10 shadow-[0_0_28px_-6px_rgba(139,92,246,0.55)] ring-1 ring-violet-400/25">
+              <Gamepad2 className="h-5 w-5 text-violet-200" strokeWidth={2.25} />
             </div>
+            <h1 className="home-title text-[1.35rem] font-bold tracking-tight sm:text-2xl">
+              게임 아케이드
+            </h1>
           </div>
+
+          <PlayModeToggle mode={mode} onChange={setMode} />
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-4 pb-16 pt-8 sm:px-6 sm:pt-10 lg:px-8">
+      <main className="relative z-10 mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
         <div
           key={mode}
           className={`home-game-grid grid gap-5 ${gridClassByMode[mode]}`}
         >
-          {visibleGames.map((game) => (
+          {visibleGames.map((game, index) => (
             <GameHomeCard
               key={game.id}
               game={game}
               to={getGamePath(game, mode)}
+              index={index}
             />
           ))}
         </div>
