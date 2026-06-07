@@ -204,7 +204,3 @@ export function startHomeBgm(): void {
   starting = true;
   beginEngine();
 }
-
-export function isHomeBgmActive(): boolean {
-  return engine !== null;
-}

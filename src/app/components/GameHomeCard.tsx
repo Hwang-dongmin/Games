@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { Link } from 'react-router';
 import type { GameDefinition } from '../data/games';
-import { ImageWithFallback } from './figma/ImageWithFallback';
+import { ImageWithFallback } from './ImageWithFallback';
 
 type GameHomeCardProps = {
   game: GameDefinition;

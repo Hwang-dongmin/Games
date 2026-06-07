@@ -1,5 +1,5 @@
 import { Layers, Users } from 'lucide-react';
-import { ImageWithFallback } from './figma/ImageWithFallback';
+import { ImageWithFallback } from './ImageWithFallback';
 import { SplitModeHoverCard } from './ui/SplitModeHoverCard';
 import { useTouchPrimary } from './ui/use-mobile';
 

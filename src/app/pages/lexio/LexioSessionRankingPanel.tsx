@@ -17,7 +17,7 @@ export type LexioSessionRankEntry = {
   sessionTotal: number;
 };
 
-export function buildLexioSessionRankings(
+function buildLexioSessionRankings(
   playersCoins: LexioPlayerFinishCoins[],
 ): LexioSessionRankEntry[] {
   const sorted = [...playersCoins].sort(

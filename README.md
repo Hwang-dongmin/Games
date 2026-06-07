@@ -1,11 +1,18 @@
 
-  # 게임사이트
+# 게임사이트
 
-  This is a code bundle for 게임사이트. The original project is available at https://qorjiwon-games.vercel.app/
+웹 기반 미니 게임 모음입니다. 배포 사이트: https://qorjiwon-games.vercel.app/
 
-  ## Running the code
+## 실행 방법
 
-  Run `npm i` to install the dependencies.
+의존성 설치:
 
-  Run `npm run dev` to start the development server.
-  
+```bash
+npm i
+```
+
+개발 서버 실행:
+
+```bash
+npm run dev
+```

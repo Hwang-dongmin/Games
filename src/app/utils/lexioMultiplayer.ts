@@ -85,11 +85,6 @@ export function parseRoomCodeInput(input: string): string | null {
   return body ? `${ROOM_PREFIX}${body}` : null;
 }
 
-/** @deprecated parseRoomCodeInput 사용 */
-export function normalizeRoomCode(input: string): string {
-  return parseRoomCodeInput(input) ?? `${ROOM_PREFIX}${input.trim().toUpperCase().replace(/\s/g, '')}`;
-}
-
 export function displayRoomCode(roomId: string): string {
   return roomId.startsWith(ROOM_PREFIX)
     ? roomId.slice(ROOM_PREFIX.length)

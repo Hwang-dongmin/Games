@@ -73,7 +73,7 @@ function sfxOut(ctx: AudioContext): AudioNode {
   return masterBus;
 }
 
-export function applyLexioSfxSettings(): void {
+function applyLexioSfxSettings(): void {
   if (audioCtx && audioCtx.state !== 'closed') {
     syncMasterGain(audioCtx);
   }

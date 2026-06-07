@@ -43,13 +43,6 @@ const COLOR_RANK: Record<LexioColor, number> = {
   red: 4,
 };
 
-export const COLOR_KOREAN: Record<LexioColor, string> = {
-  green: '초',
-  blue: '파',
-  yellow: '노',
-  red: '빨',
-};
-
 export const COLOR_HEX: Record<LexioColor, string> = {
   green: '#22c55e',
   blue: '#3b82f6',
@@ -70,10 +63,6 @@ export function tileStrength(t: LexioTile): number {
 
 export function compareTiles(a: LexioTile, b: LexioTile): number {
   return tileStrength(a) - tileStrength(b);
-}
-
-export function createDeck(): LexioTile[] {
-  return createDeckForPlayerCount(5);
 }
 
 /** 보드게임 인원별 타일 구성 (3·4·5인) */
@@ -729,25 +718,6 @@ export function findStarterIndex(players: LexioPlayer[]): number {
     }
   });
   return bestIdx;
-}
-
-// 손에 가장 약한 타일이 있는지 확인
-export function hasLowestTile(
-  player: LexioPlayer,
-  allPlayers: LexioPlayer[],
-): boolean {
-  let lowestStrength = Infinity;
-  let lowestPlayerIdx = -1;
-  allPlayers.forEach((p, idx) => {
-    for (const t of p.hand) {
-      const s = tileStrength(t);
-      if (s < lowestStrength) {
-        lowestStrength = s;
-        lowestPlayerIdx = idx;
-      }
-    }
-  });
-  return allPlayers[lowestPlayerIdx]?.id === player.id;
 }
 
 /** 판 종료 시 손패 기준 코인: 남은 장수 × (숫자 2 보유 시 2배) */
