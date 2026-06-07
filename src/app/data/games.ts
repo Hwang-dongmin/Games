@@ -49,7 +49,7 @@ export const games: GameDefinition[] = [
     offlinePath: '/2048',
     color: 'from-orange-500 to-red-500',
     image:
-      'https://images.unsplash.com/photo-1612385763901-68857dd4c43c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwdXp6bGUlMjBnYW1lJTIwY29sb3JmdWx8ZW58MXx8fHwxNzcxOTM3MzM3fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral',
+      'https://images.unsplash.com/photo-1769577608140-9f91760aef04?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
     offline: true,
     online: false,
   },

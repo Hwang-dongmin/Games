@@ -12,9 +12,12 @@ import { startHomeBgm, stopHomeBgm } from '../utils/homeBgm';
 import { isLexioSfxMuted, unlockLexioAudio } from '../utils/lexioSounds';
 
 const gridClassByMode: Record<PlayMode, string> = {
-  offline: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4',
-  online: 'grid-cols-1 sm:max-w-sm sm:mx-auto w-full',
+  offline: 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-4',
+  online: 'grid-cols-1 sm:max-w-md lg:max-w-xl xl:max-w-2xl sm:mx-auto w-full',
 };
+
+const pageShellClass =
+  'mx-auto w-full max-w-6xl px-5 sm:px-8 lg:max-w-7xl lg:px-10 xl:max-w-[85rem] xl:px-12 2xl:max-w-[96rem] 2xl:px-16';
 
 export default function Home() {
   const [mode, setMode] = useState<PlayMode>('offline');
@@ -40,7 +43,7 @@ export default function Home() {
       </div>
 
       <header className="home-header relative z-10 border-b border-white/[0.07] bg-[#08070e]/80 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-6 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+        <div className={`${pageShellClass} flex flex-col gap-4 py-6 sm:flex-row sm:items-center sm:justify-between`}>
           <div className="flex items-center gap-3.5">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500/25 to-fuchsia-600/10 shadow-[0_0_28px_-6px_rgba(139,92,246,0.55)] ring-1 ring-violet-400/25">
               <Gamepad2 className="h-5 w-5 text-violet-200" strokeWidth={2.25} />
@@ -57,7 +60,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="relative z-10 mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
+      <main className={`relative z-10 py-10 sm:py-14 ${pageShellClass}`}>
         <div
           key={mode}
           className={`home-game-grid grid gap-5 ${gridClassByMode[mode]}`}
