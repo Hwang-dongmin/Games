@@ -1,0 +1,37 @@
+---
+description: >-
+  Intentionally kept unused code — do not delete during cleanup, dead-code
+  analysis, or refactoring unless the user explicitly asks to remove it.
+alwaysApply: true
+---
+
+# Reserved code (do not delete)
+
+These paths are **intentionally unused** but kept for future reuse.
+Do **not** delete, move, rename, or "clean up" them unless the user explicitly asks.
+
+## Split-mode home card (future UX)
+
+Purpose: hover/tap split card for offline vs online mode selection on the home page.
+
+- `src/app/components/ui/SplitModeHoverCard.tsx`
+- `src/app/components/LexioHomeCard.tsx`
+- `src/styles/split-mode-hover-card.css` (imported from `src/styles/index.css`)
+- `src/app/components/ui/use-mobile.ts` (used by SplitModeHoverCard and LexioHomeCard)
+
+## shadcn UI kit (template library)
+
+Purpose: pre-installed component library for future screens; not dead code.
+
+- `src/app/components/ui/**` — keep the full kit unless the user asks to trim it
+- **Actively used today:** `select.tsx`, `slider.tsx`, `utils.ts`
+
+When suggesting dead-code removal, treat the shadcn UI folder as reserved inventory, not unused cruft.
+
+## Cleanup requests
+
+When the user asks to analyze or remove unused code:
+
+1. Skip everything listed above.
+2. Do not recommend deleting SplitModeHoverCard or LexioHomeCard as "orphaned."
+3. Do not recommend bulk-removing `src/app/components/ui/` or uninstalling Radix/shadcn deps tied to that folder.
