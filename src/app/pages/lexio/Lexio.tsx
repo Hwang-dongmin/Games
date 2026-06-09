@@ -35,6 +35,7 @@ import {
   type LexioAIDifficulty,
 } from '../../utils/lexio';
 import LexioFirstPersonScene from './LexioFirstPersonScene';
+import LexioLoadingOverlay from './LexioLoadingOverlay';
 import LexioOfflineSetup from './LexioOfflineSetup';
 import LexioRulesContent from './LexioRulesContent';
 import LexioSessionRankingPanel from './LexioSessionRankingPanel';
@@ -170,6 +171,8 @@ export default function Lexio() {
   >([]);
   const [discardedTiles, setDiscardedTiles] = useState<LexioTile[]>([]);
   const [hasHydrated, setHasHydrated] = useState(false);
+  // 3D 테이블 에셋(GLB) 로드 완료 여부 — 게임 시작 시 로딩 화면 표시용
+  const [tableReady, setTableReady] = useState(false);
   const discardSeqRef = useRef(0);
   const [pendingSessionRounds, setPendingSessionRounds] = useState(5);
   const [pendingAiCount, setPendingAiCount] = useState(MAX_OFFLINE_AI);
@@ -236,6 +239,7 @@ export default function Lexio() {
     setSessionCompletedRounds(0);
     setSessionCoinsByPlayerId({});
     setLastRoundCoinRows([]);
+    setTableReady(false);
     const dealt = dealHands(makePlayers(aiCount));
     const starter = findStarterIndex(dealt);
     setPlayers(dealt);
@@ -253,6 +257,7 @@ export default function Lexio() {
   }, [pendingSessionRounds, pendingAiCount, pendingAiDifficulty]);
 
   const resetSessionToSetup = useCallback(() => {
+    setTableReady(false);
     setPlayers([]);
     setCurrentPlay(null);
     setTrickStarterIdx(null);
@@ -1078,8 +1083,12 @@ export default function Lexio() {
                 discardPlacements={discardPlacements}
                 finishTableUi={finishTableUi}
                 sessionCoinsByPlayerId={sessionCoinsByPlayerId}
+                onSceneReady={() => setTableReady(true)}
               />
             </div>
+
+            {/* 게임 시작 직후: 3D 테이블 에셋 로드까지 로딩 화면 */}
+            <LexioLoadingOverlay ready={tableReady} />
 
             {phase === 'finished' &&
               !sessionHasNextHand &&

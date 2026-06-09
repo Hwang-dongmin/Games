@@ -1729,6 +1729,16 @@ function SceneContent({
   );
 }
 
+/** Suspense 경계 안에서만 마운트 → 모든 GLB(에셋) 로드가 끝났음을 알린다 */
+function SceneReadySignal({ onReady }: { onReady?: () => void }) {
+  const onReadyRef = useRef(onReady);
+  onReadyRef.current = onReady;
+  useEffect(() => {
+    onReadyRef.current?.();
+  }, []);
+  return null;
+}
+
 function setIntroStartPose(
   camera: THREE.Camera,
   angle: number,
@@ -1899,6 +1909,7 @@ export default function LexioFirstPersonScene({
   sessionCoinsByPlayerId = {},
   playStartIntro = false,
   onStartIntroComplete,
+  onSceneReady,
   interactionEnabled = true,
 }: {
   players: LexioPlayer[];
@@ -1913,6 +1924,8 @@ export default function LexioFirstPersonScene({
   sessionCoinsByPlayerId?: Record<number, number>;
   playStartIntro?: boolean;
   onStartIntroComplete?: () => void;
+  /** 씬 에셋(GLB) 로드가 모두 끝나 테이블이 그려질 준비가 됐을 때 */
+  onSceneReady?: () => void;
   interactionEnabled?: boolean;
 }) {
   return (
@@ -1928,6 +1941,7 @@ export default function LexioFirstPersonScene({
         onStartIntroComplete={onStartIntroComplete}
       />
       <Suspense fallback={null}>
+        <SceneReadySignal onReady={onSceneReady} />
         <SceneContent
           players={players}
           currentPlayerIdx={currentPlayerIdx}
