@@ -47,6 +47,17 @@ const games: GameDefinition[] = [
     offline: true,
     online: false,
   },
+  {
+    id: 'blind-omok',
+    title: '블라인드 오목',
+    description: '데블스 플랜 히든 매치. 누구의 돌인지 기억하며 5목을 만드세요',
+    offlinePath: '/blind-omok',
+    color: 'from-emerald-700 to-stone-900',
+    image:
+      'https://images.unsplash.com/photo-1606092195730-7fe7f67a9076?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+    offline: true,
+    online: false,
+  },
 ];
 
 export function getGamesForMode(mode: PlayMode): GameDefinition[] {

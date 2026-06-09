@@ -4,6 +4,7 @@ import Game2048 from "./pages/Game2048";
 import TexasHoldem from "./pages/TexasHoldem";
 import Lexio from "./pages/lexio/Lexio";
 import LexioOnline from "./pages/lexio/LexioOnline";
+import BlindOmok from "./pages/BlindOmok";
 
 export const router = createBrowserRouter([
   {
@@ -25,5 +26,9 @@ export const router = createBrowserRouter([
   {
     path: "/lexio/online",
     Component: LexioOnline,
+  },
+  {
+    path: "/blind-omok",
+    Component: BlindOmok,
   },
 ]);
