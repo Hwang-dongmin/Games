@@ -173,6 +173,8 @@ export default function Lexio() {
   const [hasHydrated, setHasHydrated] = useState(false);
   // 3D 테이블 에셋(GLB) 로드 완료 여부 — 게임 시작 시 로딩 화면 표시용
   const [tableReady, setTableReady] = useState(false);
+  // 로딩 오버레이가 완전히 사라진 뒤에만 게임 진행·입력 허용
+  const [gameReady, setGameReady] = useState(false);
   const discardSeqRef = useRef(0);
   const [pendingSessionRounds, setPendingSessionRounds] = useState(5);
   const [pendingAiCount, setPendingAiCount] = useState(MAX_OFFLINE_AI);
@@ -240,6 +242,7 @@ export default function Lexio() {
     setSessionCoinsByPlayerId({});
     setLastRoundCoinRows([]);
     setTableReady(false);
+    setGameReady(false);
     const dealt = dealHands(makePlayers(aiCount));
     const starter = findStarterIndex(dealt);
     setPlayers(dealt);
@@ -258,6 +261,7 @@ export default function Lexio() {
 
   const resetSessionToSetup = useCallback(() => {
     setTableReady(false);
+    setGameReady(false);
     setPlayers([]);
     setCurrentPlay(null);
     setTrickStarterIdx(null);
@@ -585,7 +589,7 @@ export default function Lexio() {
 
   // AI 자동 진행
   useEffect(() => {
-    if (phase !== 'playing') return;
+    if (phase !== 'playing' || !gameReady) return;
     const current = players[currentPlayerIdx];
     if (!current || !current.isAI) return;
 
@@ -614,6 +618,7 @@ export default function Lexio() {
     doPlay,
     doPass,
     aiMoveOptions,
+    gameReady,
   ]);
 
   const humanIdx = players.findIndex((p) => !p.isAI);
@@ -633,16 +638,18 @@ export default function Lexio() {
   }, [phase]);
 
   useEffect(() => {
+    if (phase === 'playing' && !gameReady) return;
     setLexioBgmMode(phase === 'finished' ? 'finished' : 'playing');
     return () => stopLexioBgm();
-  }, [phase]);
+  }, [phase, gameReady]);
 
   useEffect(() => {
+    if (!gameReady) return;
     if (isHumanTurn && !wasHumanTurnRef.current) {
       playLexioSound('turnStart');
     }
     wasHumanTurnRef.current = isHumanTurn;
-  }, [isHumanTurn]);
+  }, [isHumanTurn, gameReady]);
 
   const canHumanPlay =
     isHumanTurn &&
@@ -1084,11 +1091,15 @@ export default function Lexio() {
                 finishTableUi={finishTableUi}
                 sessionCoinsByPlayerId={sessionCoinsByPlayerId}
                 onSceneReady={() => setTableReady(true)}
+                interactionEnabled={gameReady}
               />
             </div>
 
             {/* 게임 시작 직후: 3D 테이블 에셋 로드까지 로딩 화면 */}
-            <LexioLoadingOverlay ready={tableReady} />
+            <LexioLoadingOverlay
+              ready={tableReady}
+              onDismissed={() => setGameReady(true)}
+            />
 
             {phase === 'finished' &&
               !sessionHasNextHand &&
@@ -1128,7 +1139,7 @@ export default function Lexio() {
                       <span className="text-purple-300/75">
                         ({humanPlayer.hand.length}장)
                       </span>
-                      {isHumanTurn && phase === 'playing' && (
+                      {isHumanTurn && phase === 'playing' && gameReady && (
                         <span
                           className="ml-1 rounded-full px-2 py-0.5 text-[10px] tracking-[0.25em] uppercase"
                           style={{
@@ -1195,7 +1206,7 @@ export default function Lexio() {
                     </div>
                   ) : (
                     <div className="pointer-events-auto flex flex-wrap items-center justify-center gap-3">
-                      {isHumanTurn && phase === 'playing' && (
+                      {isHumanTurn && phase === 'playing' && gameReady && (
                         <>
                           <button
                             type="button"

@@ -1210,6 +1210,12 @@
   }
 }
 
+/* 로딩 중엔 불투명 배경 — 반투명 웰컴 오버레이 뒤로 3D가 툭 보이는 현상 방지 */
+.lexio-loading-overlay:not(.lexio-welcome-leaving) {
+  background:
+    radial-gradient(ellipse at top, #2e1065 0%, #1e1b4b 45%, #0a0a23 100%);
+}
+
 .lexio-loading-stage {
   position: relative;
   z-index: 1;
@@ -1269,7 +1275,7 @@
     rgba(196, 181, 253, 0.95) 100%
   );
   box-shadow: 0 0 10px rgba(168, 85, 247, 0.45);
-  transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: width 0.75s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .lexio-loading-progress-shine {

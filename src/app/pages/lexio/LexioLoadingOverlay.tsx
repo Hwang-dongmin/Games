@@ -8,34 +8,80 @@ const TILE_COUNT = 5;
 type LexioLoadingOverlayProps = {
   /** 씬 에셋(GLB)이 모두 로드되어 테이블을 그릴 준비가 됐는지 */
   ready: boolean;
+  /** 페이드 아웃이 끝나 오버레이가 완전히 사라질 때 */
+  onDismissed?: () => void;
 };
 
-/** 로딩 화면이 너무 짧게 깜빡이지 않도록 최소 노출 시간 */
-const MIN_VISIBLE_MS = 700;
+/** 로딩이 빨리 끝나도 최소 이 시간만큼은 로딩 화면 유지 */
+const MIN_VISIBLE_MS = 2000;
 /** 페이드 아웃 길이 */
 const FADE_OUT_MS = 650;
+/** 진행 바가 천천히 차는 데 걸리는 시간 */
+const BAR_FILL_MS = 2600;
+const BAR_START = 6;
+const BAR_MAX_BEFORE_LEAVE = 94;
 
 /**
  * 게임 시작 직후 3D 테이블 에셋이 로드될 때까지 덮어두는 로딩 화면.
  * 온라인 웰컴 오버레이와 동일한 비주얼 언어(비네트·오브·카드)를 사용한다.
  */
-export default function LexioLoadingOverlay({ ready }: LexioLoadingOverlayProps) {
-  const { progress } = useProgress();
+export default function LexioLoadingOverlay({
+  ready,
+  onDismissed,
+}: LexioLoadingOverlayProps) {
+  const { progress: assetProgress } = useProgress();
   const [mounted, setMounted] = useState(true);
   const [leaving, setLeaving] = useState(false);
+  const [displayPct, setDisplayPct] = useState(BAR_START);
   const shownAtRef = useRef(Date.now());
+  const barStartRef = useRef(performance.now());
+  const onDismissedRef = useRef(onDismissed);
+  onDismissedRef.current = onDismissed;
 
-  const pct = ready ? 100 : Math.min(96, Math.max(4, Math.round(progress)));
+  // 시간 기반으로 천천히 채움. useProgress는 상한만 참고(빠르게 끝나도 바가 앞서지 않음)
+  useEffect(() => {
+    let raf = 0;
+    const step = (now: number) => {
+      const elapsed = now - barStartRef.current;
+      const timeRatio = Math.min(1, elapsed / BAR_FILL_MS);
+      const eased = 1 - (1 - timeRatio) ** 2.4;
+      const timePct =
+        BAR_START + (BAR_MAX_BEFORE_LEAVE - BAR_START) * eased;
+
+      let target: number;
+      if (leaving) {
+        target = 100;
+      } else if (ready) {
+        target = BAR_MAX_BEFORE_LEAVE;
+      } else {
+        const assetCap = Math.min(
+          BAR_MAX_BEFORE_LEAVE,
+          Math.max(BAR_START, assetProgress),
+        );
+        target = Math.min(timePct, assetCap);
+      }
+
+      setDisplayPct((prev) => {
+        if (Math.abs(prev - target) < 0.25) return target;
+        return prev + (target - prev) * 0.04;
+      });
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [assetProgress, ready, leaving]);
+
+  const pct = Math.round(displayPct);
 
   useEffect(() => {
     if (!ready) return;
     const elapsed = Date.now() - shownAtRef.current;
     const wait = Math.max(0, MIN_VISIBLE_MS - elapsed);
     const leaveTimer = window.setTimeout(() => setLeaving(true), wait);
-    const unmountTimer = window.setTimeout(
-      () => setMounted(false),
-      wait + FADE_OUT_MS,
-    );
+    const unmountTimer = window.setTimeout(() => {
+      setMounted(false);
+      onDismissedRef.current?.();
+    }, wait + FADE_OUT_MS);
     return () => {
       window.clearTimeout(leaveTimer);
       window.clearTimeout(unmountTimer);
@@ -93,7 +139,7 @@ export default function LexioLoadingOverlay({ ready }: LexioLoadingOverlayProps)
               className="lexio-loading-progress-fill"
               style={{ width: `${pct}%` }}
             />
-            {!ready && <span className="lexio-loading-progress-shine" />}
+            {!leaving && <span className="lexio-loading-progress-shine" />}
           </div>
         </div>
       </div>
