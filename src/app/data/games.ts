@@ -54,7 +54,7 @@ const games: GameDefinition[] = [
     offlinePath: '/blind-omok',
     color: 'from-emerald-700 to-stone-900',
     image:
-      'https://images.unsplash.com/photo-1606092195730-7fe7f67a9076?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
+      'https://images.unsplash.com/photo-1777652907869-97332fd656d8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1080',
     offline: true,
     online: false,
   },
