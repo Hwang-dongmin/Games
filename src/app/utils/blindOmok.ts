@@ -85,18 +85,15 @@ export function getWinningLine(
   return null;
 }
 
-/**
- * 데블스 플랜 블라인드 오목의 돌 색상 팔레트.
- * 한 턴(플레이어 착수 + NPC 응수)은 같은 색을 공유하며 턴마다 순환한다.
- */
+/** 블라인드 오목 돌 색상 팔레트 (플레이어가 직접 선택) */
 export const STONE_PALETTE = [
-  { id: 'red', label: '빨강', from: '#fca5a5', via: '#ef4444', to: '#991b1b' },
-  { id: 'orange', label: '주황', from: '#fdba74', via: '#f97316', to: '#9a3412' },
-  { id: 'yellow', label: '노랑', from: '#fde68a', via: '#eab308', to: '#854d0e' },
-  { id: 'green', label: '초록', from: '#86efac', via: '#22c55e', to: '#166534' },
-  { id: 'blue', label: '파랑', from: '#93c5fd', via: '#3b82f6', to: '#1e40af' },
-  { id: 'purple', label: '보라', from: '#c4b5fd', via: '#8b5cf6', to: '#5b21b6' },
-  { id: 'pink', label: '분홍', from: '#f9a8d4', via: '#ec4899', to: '#9d174d' },
+  { id: 'red', label: '빨강', from: '#ff4444', via: '#ff1a1a', to: '#cc0000' },
+  { id: 'orange', label: '주황', from: '#ff8833', via: '#ff6600', to: '#cc4400' },
+  { id: 'yellow', label: '노랑', from: '#ffdd33', via: '#ffcc00', to: '#cc9900' },
+  { id: 'green', label: '초록', from: '#33ff66', via: '#00e54d', to: '#00aa33' },
+  { id: 'blue', label: '파랑', from: '#4488ff', via: '#2266ff', to: '#0044cc' },
+  { id: 'purple', label: '보라', from: '#bb66ff', via: '#9933ff', to: '#6600cc' },
+  { id: 'pink', label: '분홍', from: '#ff66aa', via: '#ff3388', to: '#cc0066' },
 ] as const;
 
 export function paletteColorForTurn(playerMoveIndex: number) {

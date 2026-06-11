@@ -1,0 +1,632 @@
+/* Blind Omok — page shell & board */
+
+.blind-omok-page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: #060a14;
+  color: #e8eef8;
+}
+
+.blind-omok-page--lobby {
+  justify-content: flex-start;
+}
+
+.blind-omok-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(0, 229, 255, 0.12);
+  background: rgba(6, 10, 20, 0.92);
+}
+
+@media (min-width: 640px) {
+  .blind-omok-header {
+    padding: 14px 24px;
+  }
+}
+
+.blind-omok-header-start,
+.blind-omok-header-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.blind-omok-header-end {
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.blind-omok-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 229, 255, 0.22);
+  background: rgba(12, 19, 36, 0.9);
+  color: #e8eef8;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.blind-omok-btn:hover {
+  background: #141f38;
+  border-color: rgba(0, 229, 255, 0.45);
+  color: #fff;
+}
+
+.blind-omok-btn--ghost {
+  background: transparent;
+}
+
+.blind-omok-btn--primary {
+  background: #00c8e8;
+  border-color: #00e5ff;
+  color: #041018;
+}
+
+.blind-omok-btn--primary:hover {
+  background: #00e5ff;
+  color: #041018;
+}
+
+.blind-omok-btn--icon {
+  padding: 8px 10px;
+}
+
+/* Lobby */
+
+.blind-omok-lobby {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px 48px;
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+}
+
+.blind-omok-hero {
+  text-align: center;
+  margin-bottom: 36px;
+}
+
+.blind-omok-hero h1 {
+  font-size: clamp(2rem, 6vw, 2.75rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #fff;
+  line-height: 1.1;
+  margin-bottom: 10px;
+}
+
+.blind-omok-hero p {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: rgba(180, 210, 230, 0.85);
+  max-width: 42ch;
+  margin: 0 auto;
+}
+
+.blind-omok-mode-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.blind-omok-mode-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 18px 20px;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 229, 255, 0.18);
+  background: linear-gradient(135deg, rgba(12, 19, 36, 0.95) 0%, rgba(8, 14, 28, 0.98) 100%);
+  text-align: left;
+  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+
+.blind-omok-mode-card:hover {
+  border-color: rgba(0, 229, 255, 0.5);
+  background: linear-gradient(135deg, rgba(17, 28, 51, 0.98) 0%, rgba(10, 18, 36, 1) 100%);
+  transform: translateY(-1px);
+}
+
+.blind-omok-mode-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: rgba(0, 229, 255, 0.1);
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  color: #67e8f9;
+  flex-shrink: 0;
+}
+
+.blind-omok-mode-copy strong {
+  display: block;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 2px;
+}
+
+.blind-omok-mode-copy > span {
+  display: block;
+  font-size: 0.8125rem;
+  color: rgba(180, 200, 220, 0.75);
+}
+
+.blind-omok-lobby-actions {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+}
+
+.blind-omok-lobby-actions .blind-omok-btn {
+  flex: 1;
+}
+
+/* Game layout */
+
+.blind-omok-main {
+  flex: 1;
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .blind-omok-main {
+    grid-template-columns: minmax(0, 1fr) 272px;
+    padding: 20px 24px 28px;
+    gap: 20px;
+  }
+}
+
+.blind-omok-board-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.blind-omok-board-frame {
+  border-radius: 12px;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  background: #080e1a;
+  padding: 12px;
+}
+
+@media (min-width: 640px) {
+  .blind-omok-board-frame {
+    padding: 16px;
+  }
+}
+
+.blind-omok-result-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+
+.blind-omok-result-banner--won {
+  background: rgba(0, 120, 140, 0.25);
+  border: 1px solid rgba(0, 229, 255, 0.45);
+  color: #a5f3fc;
+}
+
+.blind-omok-result-banner--lost {
+  background: rgba(120, 20, 30, 0.35);
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  color: #fecaca;
+}
+
+.blind-omok-result-banner--draw {
+  background: rgba(20, 31, 56, 0.9);
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  color: #e8eef8;
+}
+
+.blind-omok-message {
+  text-align: center;
+  font-size: 0.8125rem;
+  color: #fcd34d;
+  padding: 4px 0;
+}
+
+.blind-omok-owner-legend {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  color: rgba(220, 230, 245, 0.9);
+  padding-top: 4px;
+}
+
+.blind-omok-owner-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.blind-omok-owner-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  flex-shrink: 0;
+}
+
+/* Sidebar */
+
+.blind-omok-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.blind-omok-panel {
+  border-radius: 14px;
+  border: 1px solid rgba(0, 229, 255, 0.14);
+  background: rgba(10, 16, 32, 0.85);
+  padding: 16px;
+}
+
+.blind-omok-panel-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(0, 229, 255, 0.65);
+  margin-bottom: 12px;
+}
+
+.blind-omok-turn-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.blind-omok-turn-badge--active {
+  background: rgba(0, 229, 255, 0.12);
+  border: 1px solid rgba(0, 229, 255, 0.35);
+  color: #a5f3fc;
+}
+
+.blind-omok-turn-badge--waiting {
+  background: rgba(20, 31, 56, 0.8);
+  border: 1px solid rgba(100, 120, 150, 0.25);
+  color: rgba(180, 195, 215, 0.85);
+}
+
+.blind-omok-turn-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #00e5ff;
+  flex-shrink: 0;
+}
+
+.blind-omok-turn-badge--waiting .blind-omok-turn-dot {
+  background: rgba(150, 165, 185, 0.6);
+  animation: blind-omok-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes blind-omok-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.blind-omok-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.blind-omok-stat {
+  text-align: center;
+  padding: 10px 6px;
+  border-radius: 10px;
+  background: rgba(6, 10, 20, 0.6);
+  border: 1px solid rgba(0, 229, 255, 0.08);
+}
+
+.blind-omok-stat dt {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: rgba(160, 180, 200, 0.75);
+  margin-bottom: 4px;
+}
+
+.blind-omok-stat dd {
+  font-size: 1.25rem;
+  font-weight: 800;
+  line-height: 1;
+  color: #fff;
+}
+
+.blind-omok-stat--win dd {
+  color: #67e8f9;
+}
+
+.blind-omok-stat--loss dd {
+  color: #fca5a5;
+}
+
+.blind-omok-hint {
+  margin-top: 10px;
+  font-size: 0.75rem;
+  color: rgba(150, 170, 190, 0.7);
+  line-height: 1.45;
+}
+
+.blind-omok-color-section + .blind-omok-color-section {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(0, 229, 255, 0.08);
+}
+
+.blind-omok-color-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(200, 215, 235, 0.9);
+  margin-bottom: 10px;
+}
+
+.blind-omok-color-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.blind-omok-color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  padding: 0;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+  cursor: pointer;
+}
+
+.blind-omok-color-swatch:hover:not(:disabled) {
+  transform: scale(1.08);
+}
+
+.blind-omok-color-swatch--selected {
+  border-color: #fff;
+  transform: scale(1.1);
+}
+
+.blind-omok-color-swatch:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.blind-omok-sidebar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.blind-omok-sidebar-actions .blind-omok-btn {
+  width: 100%;
+}
+
+/* Board */
+
+.blind-omok-board {
+  position: relative;
+  padding: 2px;
+  border: 2px solid #00e5ff;
+  border-radius: 4px;
+  background: #0a1020;
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.2);
+  overflow: hidden;
+}
+
+.blind-omok-play-area {
+  position: relative;
+  z-index: 2;
+  aspect-ratio: 1;
+  background: #0a1020;
+  --segments: 14;
+  --stone-scale: 0.84;
+  --stone-size: calc(100% / var(--segments) * var(--stone-scale));
+}
+
+.blind-omok-lines-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.blind-omok-lines-layer svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.blind-omok-points-layer {
+  position: absolute;
+  inset: 0;
+}
+
+.blind-omok-point {
+  position: absolute;
+  width: var(--stone-size);
+  height: var(--stone-size);
+  transform: translate(-50%, -50%);
+  border: none;
+  padding: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.blind-omok-point:not(:disabled):hover {
+  cursor: pointer;
+}
+
+.blind-omok-point:not(:disabled).blind-omok-point--empty:hover::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0, 229, 255, 0.2);
+  border: 1px solid rgba(0, 229, 255, 0.55);
+}
+
+.blind-omok-point:disabled {
+  cursor: default;
+}
+
+.blind-omok-stone {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  transition: transform 0.15s ease;
+  transform-origin: center;
+  z-index: 2;
+}
+
+.blind-omok-stone--last {
+  transform: scale(1.05);
+  box-shadow: 0 0 0 2px #ffffff;
+  z-index: 10;
+}
+
+.blind-omok-stone--win {
+  transform: scale(1.08);
+  box-shadow: 0 0 0 2px #ffd700;
+  z-index: 10;
+}
+
+.blind-omok-stone-owner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 34%;
+  height: 34%;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+/* Modal */
+
+.blind-omok-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(2, 4, 10, 0.88);
+}
+
+.blind-omok-modal {
+  width: 100%;
+  max-width: 420px;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  background: #0c1324;
+  padding: 24px;
+}
+
+.blind-omok-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.blind-omok-modal-header h2 {
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.blind-omok-modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: rgba(180, 195, 215, 0.8);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.blind-omok-modal-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+}
+
+.blind-omok-rules {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: rgba(210, 220, 235, 0.9);
+}
+
+.blind-omok-rules b {
+  color: #fff;
+  font-weight: 600;
+}
+
+.blind-omok-rules-foot {
+  margin-top: 16px;
+  font-size: 0.75rem;
+  color: rgba(130, 150, 170, 0.7);
+}
