@@ -162,7 +162,7 @@ export default function OnlineRoomList({
 
       {!initialLoading && result.status === 'ok' && rooms.length === 0 && (
         <p className="py-8 text-center text-sm text-zinc-500">
-          열린 방이 없습니다. 위 게임을 선택해 방을 만들어 보세요.
+          현재 생성된 방이 없습니다. 게임을 선택하고 친구들과 함께 플레이하세요.
         </p>
       )}
 
