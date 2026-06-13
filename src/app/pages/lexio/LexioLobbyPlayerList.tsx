@@ -133,13 +133,6 @@ export default function LexioLobbyPlayerList({
                 : `${playersNeeded}명 더 모이면 게임을 시작할 수 있어요.`}
           </p>
         </div>
-        <span
-          className={`lexio-lobby-players-count ${
-            readyToStart ? 'lexio-lobby-players-count--ready' : ''
-          }`}
-        >
-          {players.length}/{maxPlayers}
-        </span>
       </div>
 
       <ul className="lexio-lobby-players-list">

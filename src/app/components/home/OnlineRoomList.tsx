@@ -41,6 +41,7 @@ export default function OnlineRoomList({
 }: OnlineRoomListProps) {
   const navigate = useNavigate();
   const [result, setResult] = useState<ListRoomsResult>({ status: 'ok', rooms: [] });
+  const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [passwordTarget, setPasswordTarget] = useState<LobbyRoom | null>(null);
   const [passwordInput, setPasswordInput] = useState('');
@@ -65,7 +66,10 @@ export default function OnlineRoomList({
     let cancelled = false;
     const load = async () => {
       const next = await listRooms();
-      if (!cancelled) setResult(next);
+      if (!cancelled) {
+        setResult(next);
+        setInitialLoading(false);
+      }
     };
     void load();
     const timer = setInterval(() => void load(), POLL_MS);
@@ -122,41 +126,47 @@ export default function OnlineRoomList({
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-100 sm:text-xl">
           <Gamepad2 className="h-5 w-5 text-violet-300" />
-          온라인 방
-          {result.status === 'ok' && (
+          방 목록
+          {!initialLoading && result.status === 'ok' && (
             <span className="text-sm font-normal text-zinc-500">{rooms.length}</span>
           )}
         </h2>
         <button
           type="button"
           onClick={() => void refresh()}
-          disabled={loading}
+          disabled={loading || initialLoading}
           aria-label="새로고침"
           className="inline-flex items-center justify-center rounded-full border border-white/10 p-2 text-zinc-300 transition hover:bg-white/5 disabled:opacity-50"
         >
-          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`h-4 w-4 ${loading || initialLoading ? 'animate-spin' : ''}`} />
         </button>
       </div>
 
-      {result.status === 'disabled' && (
+      {initialLoading && (
+        <p className="py-8 text-center text-sm text-zinc-500">
+          정보를 불러오고 있습니다…
+        </p>
+      )}
+
+      {!initialLoading && result.status === 'disabled' && (
         <p className="py-8 text-center text-sm text-zinc-500">
           방 목록 서버가 연결되지 않았습니다. (Upstash Redis 설정 확인)
         </p>
       )}
 
-      {result.status === 'error' && (
+      {!initialLoading && result.status === 'error' && (
         <p className="py-8 text-center text-sm text-zinc-500">
           방 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
         </p>
       )}
 
-      {result.status === 'ok' && rooms.length === 0 && (
+      {!initialLoading && result.status === 'ok' && rooms.length === 0 && (
         <p className="py-8 text-center text-sm text-zinc-500">
           열린 방이 없습니다. 위 게임을 선택해 방을 만들어 보세요.
         </p>
       )}
 
-      {result.status === 'ok' && rooms.length > 0 && (
+      {!initialLoading && result.status === 'ok' && rooms.length > 0 && (
         <ul className="flex flex-col gap-2">
           {rooms.map((room) => {
             const game = getGameById(room.gameId);
