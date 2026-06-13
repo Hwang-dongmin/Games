@@ -17,6 +17,10 @@ import {
   Crown,
   BookOpen,
   ChevronLeft,
+  Globe,
+  Lock,
+  RefreshCw,
+  Trophy,
 } from 'lucide-react';
 import LexioFirstPersonScene from './LexioFirstPersonScene';
 import LexioOnlineWelcomeOverlay from './LexioOnlineWelcomeOverlay';
@@ -56,6 +60,16 @@ import {
   type LobbySettings,
   type WireMessage,
 } from '../../utils/lexioMultiplayer';
+import {
+  closeRoom as apiCloseRoom,
+  fetchLeaderboard,
+  heartbeatRoom,
+  listRooms,
+  recordResult,
+  registerRoom,
+  type LeaderboardEntry,
+  type PublicRoom,
+} from '../../utils/lobbyApi';
 import { setLexioBgmMode, stopLexioBgm } from '../../utils/lexioBgm';
 import {
   playLexioSound,
@@ -123,6 +137,10 @@ export default function LexioOnline() {
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [isPublicRoom, setIsPublicRoom] = useState(true);
+  const [publicRooms, setPublicRooms] = useState<PublicRoom[] | null>(null);
+  const [loadingRooms, setLoadingRooms] = useState(false);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[] | null>(null);
 
   const hostRef = useRef<LexioHostRoom | null>(null);
   const guestRef = useRef<LexioGuestRoom | null>(null);
@@ -132,11 +150,18 @@ export default function LexioOnline() {
   lobbySettingsRef.current = lobbySettings;
   const lobbyPlayersRef = useRef(lobbyPlayers);
   lobbyPlayersRef.current = lobbyPlayers;
+  const nicknameRef = useRef(nickname);
+  nicknameRef.current = nickname;
   const statusClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
   const prevGameViewRef = useRef<ClientGameView | null>(null);
   const pendingLocalActionRef = useRef<'play' | 'pass' | null>(null);
+  /** 서버에 공개 등록된 방 코드 (null이면 미등록/비공개) */
+  const publishedRoomRef = useRef<string | null>(null);
+  const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** 세션 결과를 한 번만 기록하도록 가드 */
+  const recordedSessionRef = useRef(false);
 
   const showTransientStatus = useCallback((message: string) => {
     if (statusClearTimerRef.current) {
@@ -320,13 +345,73 @@ export default function LexioOnline() {
     [broadcastGame, showTransientStatus],
   );
 
+  const stopHeartbeat = useCallback(() => {
+    if (heartbeatTimerRef.current) {
+      clearInterval(heartbeatTimerRef.current);
+      heartbeatTimerRef.current = null;
+    }
+  }, []);
+
+  /** 서버에 등록된 공개 방을 내려서 목록에서 제거 (TTL 만료 전 즉시 정리). */
+  const unpublishRoom = useCallback(() => {
+    stopHeartbeat();
+    const code = publishedRoomRef.current;
+    publishedRoomRef.current = null;
+    if (code) void apiCloseRoom(code);
+  }, [stopHeartbeat]);
+
+  /** 현재 로비/게임 상태를 서버에 반영. 만료됐으면 재등록. */
+  const sendHeartbeat = useCallback(async () => {
+    const code = publishedRoomRef.current;
+    if (!code) return;
+    const phase = gameStateRef.current?.phase === 'playing' ? 'playing' : 'lobby';
+    const result = await heartbeatRoom(code, {
+      playerCount: lobbyPlayersRef.current.length,
+      phase,
+    });
+    if (result === 'expired' && phase === 'lobby') {
+      await registerRoom({
+        code,
+        hostNickname: nicknameRef.current.trim() || '호스트',
+        playerCount: lobbyPlayersRef.current.length,
+        maxPlayers: lobbySettingsRef.current.maxPlayers,
+        totalRounds: lobbySettingsRef.current.totalRounds,
+      });
+    }
+  }, []);
+
+  /** 공개 방으로 서버에 등록하고 heartbeat 시작 (호스트 전용). */
+  const publishRoom = useCallback(
+    async (code: string) => {
+      stopHeartbeat();
+      publishedRoomRef.current = code;
+      const ok = await registerRoom({
+        code,
+        hostNickname: nicknameRef.current.trim() || '호스트',
+        playerCount: lobbyPlayersRef.current.length || 1,
+        maxPlayers: lobbySettingsRef.current.maxPlayers,
+        totalRounds: lobbySettingsRef.current.totalRounds,
+      });
+      if (!ok) {
+        publishedRoomRef.current = null;
+        return;
+      }
+      heartbeatTimerRef.current = setInterval(() => {
+        void sendHeartbeat();
+      }, 20000);
+    },
+    [sendHeartbeat, stopHeartbeat],
+  );
+
   const cleanup = useCallback(() => {
+    unpublishRoom();
+    recordedSessionRef.current = false;
     hostRef.current?.destroy();
     guestRef.current?.destroy();
     hostRef.current = null;
     guestRef.current = null;
     gameStateRef.current = null;
-  }, []);
+  }, [unpublishRoom]);
 
   useEffect(
     () => () => {
@@ -429,6 +514,11 @@ export default function LexioOnline() {
       setScreen('lobby');
       setConnectionStatus('connected');
       gameStateRef.current = createEmptyGameState(lobbySettings.totalRounds);
+      recordedSessionRef.current = false;
+      if (isPublicRoom) {
+        lobbyPlayersRef.current = [hostPlayer];
+        void publishRoom(id);
+      }
     } catch (err) {
       setConnectionStatus('error');
       setStatusMessage(peerErrorMessage(err));
@@ -479,6 +569,62 @@ export default function LexioOnline() {
     setJoinCode(parsed ? displayRoomCode(parsed) : roomFromUrl);
   }, [roomFromUrl, screen, connectionStatus]);
 
+  // 호스트: 세션 종료 시 전적/랭킹 1회 기록 (AI 좌석 제외)
+  useEffect(() => {
+    if (!isHost || !gameView) return;
+    if (gameView.phase !== 'finished') return;
+    if (gameView.sessionCompletedRounds < gameView.sessionTotalRounds) return;
+    if (recordedSessionRef.current) return;
+    recordedSessionRef.current = true;
+
+    const coins = gameView.sessionCoinsBySeat ?? {};
+    const humanPlayers = gameView.players.filter((p) => !p.isAI);
+    if (humanPlayers.length === 0) return;
+
+    let winnerName = '';
+    let best = -Infinity;
+    for (const p of gameView.players) {
+      const c = coins[p.seat] ?? 0;
+      if (c > best) {
+        best = c;
+        winnerName = p.name;
+      }
+    }
+    void recordResult({
+      players: humanPlayers.map((p) => ({
+        name: p.name,
+        coins: coins[p.seat] ?? 0,
+      })),
+      winnerName,
+    });
+  }, [isHost, gameView]);
+
+  const refreshRooms = useCallback(async () => {
+    setLoadingRooms(true);
+    const rooms = await listRooms();
+    setPublicRooms(rooms);
+    setLoadingRooms(false);
+  }, []);
+
+  // 진입 화면: 공개 방 목록 주기적 갱신 + 리더보드 1회 로드
+  useEffect(() => {
+    if (screen !== 'entry') return;
+    let cancelled = false;
+    const load = async () => {
+      const rooms = await listRooms();
+      if (!cancelled) setPublicRooms(rooms);
+    };
+    void load();
+    const timer = setInterval(() => void load(), 8000);
+    void fetchLeaderboard().then((lb) => {
+      if (!cancelled) setLeaderboard(lb);
+    });
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [screen]);
+
   const hostStartGame = () => {
     if (lobbyPlayers.length < MIN_ONLINE_PLAYERS) {
       setStatusMessage(`최소 ${MIN_ONLINE_PLAYERS}명이 필요합니다.`);
@@ -508,6 +654,8 @@ export default function LexioOnline() {
     broadcastGame(state);
     setScreen('game');
     setStatusMessage('');
+    // 게임 시작 → 공개 로비 목록에서 즉시 제외
+    void sendHeartbeat();
     const hostView = buildClientView(state, myPeerIdRef.current);
     if (hostView) setGameView(hostView);
   };
@@ -839,6 +987,39 @@ export default function LexioOnline() {
                 className="w-full mb-4 rounded-lg bg-black/30 border border-purple-500/40 px-3 py-2.5 text-base"
                 placeholder="닉네임"
               />
+              <div className="mb-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsPublicRoom(true)}
+                  aria-pressed={isPublicRoom}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                    isPublicRoom
+                      ? 'border-purple-400/70 bg-purple-500/20 text-purple-50'
+                      : 'border-purple-500/25 bg-black/20 text-purple-300/60 hover:text-purple-200'
+                  }`}
+                >
+                  <Globe className="h-4 w-4" />
+                  공개 방
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPublicRoom(false)}
+                  aria-pressed={!isPublicRoom}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                    !isPublicRoom
+                      ? 'border-purple-400/70 bg-purple-500/20 text-purple-50'
+                      : 'border-purple-500/25 bg-black/20 text-purple-300/60 hover:text-purple-200'
+                  }`}
+                >
+                  <Lock className="h-4 w-4" />
+                  비공개
+                </button>
+              </div>
+              <p className="mb-4 -mt-2 text-sm leading-relaxed text-purple-300/60">
+                {isPublicRoom
+                  ? '공개 방은 로비 목록에 표시되어 누구나 참가할 수 있습니다.'
+                  : '비공개 방은 방 코드·초대 링크를 아는 사람만 참가합니다.'}
+              </p>
               <button
                 type="button"
                 onClick={createRoom}
@@ -916,6 +1097,117 @@ export default function LexioOnline() {
               </button>
             </section>
           </div>
+
+          {publicRooms !== null && (
+            <section
+              className="mt-6 rounded-2xl border border-purple-500/30 p-6"
+              style={{
+                background:
+                  'linear-gradient(180deg, rgba(30,27,75,0.8) 0%, rgba(10,10,35,0.9) 100%)',
+              }}
+            >
+              <div className="mb-4 flex items-center justify-between gap-2">
+                <h2 className="flex items-center gap-2 text-xl font-semibold text-purple-100">
+                  <Globe className="h-6 w-6 text-emerald-400" />
+                  공개 방
+                  <span className="text-base font-normal text-purple-300/60">
+                    {publicRooms.length}
+                  </span>
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => void refreshRooms()}
+                  disabled={loadingRooms}
+                  aria-label="목록 새로고침"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-purple-500/40 px-3 py-1.5 text-sm text-purple-200 transition hover:bg-purple-500/15 disabled:opacity-50"
+                >
+                  <RefreshCw
+                    className={`h-4 w-4 ${loadingRooms ? 'animate-spin' : ''}`}
+                  />
+                  새로고침
+                </button>
+              </div>
+
+              {publicRooms.length === 0 ? (
+                <p className="py-6 text-center text-base text-purple-300/60">
+                  지금 열린 공개 방이 없습니다. 새 방을 만들어 보세요.
+                </p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {publicRooms.map((room) => {
+                    const full = room.playerCount >= room.maxPlayers;
+                    return (
+                      <li
+                        key={room.code}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-purple-500/25 bg-black/25 px-4 py-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-base font-medium text-purple-50">
+                            {room.hostNickname}님의 방
+                          </p>
+                          <p className="font-mono text-sm tracking-widest text-purple-300/70">
+                            {displayRoomCode(room.code)} · {room.totalRounds}판
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-3">
+                          <span className="inline-flex items-center gap-1 text-sm text-purple-200/80">
+                            <Users className="h-4 w-4" />
+                            {room.playerCount}/{room.maxPlayers}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              joinRoom(displayRoomCode(room.code))
+                            }
+                            disabled={full || connectionStatus === 'connecting'}
+                            className="rounded-full bg-purple-600/80 px-4 py-1.5 text-sm font-semibold text-purple-50 transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-45"
+                          >
+                            {full ? '가득 참' : '참가'}
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          )}
+
+          {leaderboard !== null && leaderboard.length > 0 && (
+            <section
+              className="mt-6 rounded-2xl border border-amber-500/25 p-6"
+              style={{
+                background:
+                  'linear-gradient(180deg, rgba(40,30,10,0.55) 0%, rgba(10,10,35,0.9) 100%)',
+              }}
+            >
+              <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold text-amber-100">
+                <Trophy className="h-6 w-6 text-amber-400" />
+                랭킹
+              </h2>
+              <ol className="flex flex-col gap-1.5">
+                {leaderboard.slice(0, 10).map((entry, idx) => (
+                  <li
+                    key={`${entry.name}-${idx}`}
+                    className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 odd:bg-white/[0.03]"
+                  >
+                    <span className="flex min-w-0 items-center gap-3">
+                      <span className="w-5 shrink-0 text-center font-semibold text-amber-300/80">
+                        {idx + 1}
+                      </span>
+                      <span className="truncate text-base text-purple-50">
+                        {entry.name}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-sm text-purple-200/80">
+                      {entry.wins}승 · {entry.games}판
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+
           <div className="mx-auto mt-4 max-w-lg px-1">
             <LexioSfxToggle className="col-span-1" />
           </div>

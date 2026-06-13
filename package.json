@@ -6,6 +6,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
+    "dev:vercel": "vercel dev",
     "convert:models": "node scripts/convert-fbx-to-glb.mjs",
     "optimize:models": "node scripts/optimize-glb.mjs",
     "build:models": "npm run convert:models && npm run optimize:models"
@@ -39,6 +40,7 @@
     "@radix-ui/react-tooltip": "1.1.8",
     "@react-three/drei": "^9.114.3",
     "@react-three/fiber": "^8.17.14",
+    "@upstash/redis": "^1.38.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
@@ -68,6 +70,7 @@
     "@gltf-transform/functions": "^4.4.0",
     "@tailwindcss/vite": "4.1.12",
     "@types/three": "^0.160.0",
+    "@vercel/node": "^5.8.17",
     "@vitejs/plugin-react": "4.7.0",
     "fbx2gltf": "^0.9.7-p1",
     "playwright": "^1.52.0",
