@@ -5,6 +5,7 @@ import TexasHoldem from "./pages/TexasHoldem";
 import Lexio from "./pages/lexio/Lexio";
 import LexioOnline from "./pages/lexio/LexioOnline";
 import BlindOmok from "./pages/BlindOmok";
+import Feedback from "./pages/Feedback";
 
 export const router = createBrowserRouter([
   {
@@ -30,5 +31,9 @@ export const router = createBrowserRouter([
   {
     path: "/blind-omok",
     Component: BlindOmok,
+  },
+  {
+    path: "/feedback",
+    Component: Feedback,
   },
 ]);

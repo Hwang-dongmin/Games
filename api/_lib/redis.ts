@@ -70,6 +70,36 @@ export const LEADERBOARD_KEY = 'lexio:leaderboard';
 export const RESULTS_FEED_KEY = 'lexio:results';
 export const playerKey = (id: string) => `lexio:player:${id}`;
 
+export type FeedbackKind = 'guestbook' | 'bug';
+
+export const GUESTBOOK_KEY = 'feedback:guestbook';
+export const BUG_REPORT_KEY = 'feedback:bug';
+
+/** 종류별 최대 보관 개수 */
+export const FEEDBACK_CAP = 200;
+
+export const FEEDBACK_MESSAGE_MAX = 500;
+
+export function feedbackKey(kind: FeedbackKind): string {
+  return kind === 'bug' ? BUG_REPORT_KEY : GUESTBOOK_KEY;
+}
+
+export function parseFeedbackKind(raw: unknown): FeedbackKind | null {
+  return raw === 'guestbook' || raw === 'bug' ? raw : null;
+}
+
+export function normalizeMessage(raw: unknown): string {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  return s.slice(0, FEEDBACK_MESSAGE_MAX);
+}
+
+export type FeedbackEntry = {
+  id: string;
+  name: string;
+  message: string;
+  at: number;
+};
+
 export const SUPPORTED_GAME_IDS = ['lexio'] as const;
 export type GameId = (typeof SUPPORTED_GAME_IDS)[number];
 

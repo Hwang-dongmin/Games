@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useLocation, useNavigate } from 'react-router';
-import { Gamepad2 } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router';
+import { Gamepad2, MessageSquareHeart } from 'lucide-react';
 import GameHomeCard from '../components/home/GameHomeCard';
 import OnlineRoomList from '../components/home/OnlineRoomList';
 import HomeSfxToggle from '../components/home/HomeSfxToggle';
@@ -114,6 +114,16 @@ export default function Home() {
             onJoinErrorDismiss={clearJoinError}
           />
         )}
+
+        <footer className="mt-12 flex justify-center">
+          <Link
+            to="/feedback"
+            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-5 py-2.5 text-sm font-medium text-zinc-300 transition hover:border-violet-500/30 hover:bg-violet-500/5 hover:text-zinc-100"
+          >
+            <MessageSquareHeart className="h-4 w-4 text-violet-300" />
+            방명록 · 버그신고
+          </Link>
+        </footer>
       </main>
     </div>
   );
