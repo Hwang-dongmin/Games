@@ -90,18 +90,13 @@ export default function BlindOmok() {
   const [stats, setStats] = useState<Stats>(() => loadStats());
   const [message, setMessage] = useState<string | null>(null);
   const [showRules, setShowRules] = useState(false);
-  const [selectedColorId, setSelectedColorId] = useState(1);
+  const [player1ColorId, setPlayer1ColorId] = useState(1);
+  const [player2ColorId, setPlayer2ColorId] = useState(1);
   const messageTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const gameOver = result !== 'playing';
   const aiThinking = mode === 'single' && currentPlayer === WHITE && !gameOver;
   const canPickColor = !gameOver;
-  const colorPickerLabel =
-    mode === 'multi'
-      ? currentPlayer === BLACK
-        ? '플레이어 1 — 이번에 둘 색'
-        : '플레이어 2 — 이번에 둘 색'
-      : '이번에 둘 돌 색';
   const inputLocked = gameOver || aiThinking;
 
   const showMessage = useCallback((text: string) => {
@@ -207,7 +202,7 @@ export default function BlindOmok() {
       }
 
       const owner = currentPlayer;
-      const colorId = selectedColorId;
+      const colorId = owner === BLACK ? player1ColorId : player2ColorId;
       const nextBoard = board.map((r) => [...r]);
       const nextColors = colorBoard.map((r) => [...r]);
       nextBoard[row][col] = owner;
@@ -246,7 +241,8 @@ export default function BlindOmok() {
       inputLocked,
       mode,
       moveCount,
-      selectedColorId,
+      player1ColorId,
+      player2ColorId,
       endGame,
       runAIMove,
       showMessage,
@@ -455,18 +451,39 @@ export default function BlindOmok() {
 
           <div className="blind-omok-panel">
             <p className="blind-omok-panel-label">돌 색상</p>
-            <StoneColorPicker
-              label={colorPickerLabel}
-              value={selectedColorId}
-              disabled={!canPickColor}
-              onChange={setSelectedColorId}
-            />
+            {mode === 'multi' ? (
+              <>
+                <StoneColorPicker
+                  className="blind-omok-color-section"
+                  label="플레이어 1"
+                  value={player1ColorId}
+                  disabled={!canPickColor}
+                  onChange={setPlayer1ColorId}
+                />
+                <StoneColorPicker
+                  className="blind-omok-color-section"
+                  label="플레이어 2"
+                  value={player2ColorId}
+                  disabled={!canPickColor}
+                  onChange={setPlayer2ColorId}
+                />
+              </>
+            ) : (
+              <StoneColorPicker
+                label="이번에 둘 돌 색"
+                value={player1ColorId}
+                disabled={!canPickColor}
+                onChange={setPlayer1ColorId}
+              />
+            )}
             <p className="blind-omok-hint">
               {gameOver
                 ? '게임이 끝났습니다. 새 게임을 시작하세요.'
                 : mode === 'single' && aiThinking
                   ? 'NPC는 방금 둔 돌과 같은 색으로 응수합니다. 다음 착수 색도 미리 고를 수 있습니다.'
-                  : '착수 전 언제든 색을 바꿀 수 있습니다.'}
+                  : mode === 'multi'
+                    ? '각 플레이어가 자기 돌 색을 미리 고를 수 있습니다.'
+                    : '착수 전 언제든 색을 바꿀 수 있습니다.'}
             </p>
           </div>
 
