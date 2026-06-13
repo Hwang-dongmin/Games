@@ -20,6 +20,11 @@ import {
 
 const POLL_MS = 8_000;
 
+type OnlineRoomListProps = {
+  joinError?: string;
+  onJoinErrorDismiss?: () => void;
+};
+
 function phaseLabel(phase: LobbyRoom['phase']): string {
   return phase === 'lobby' ? '대기 중' : '게임 중';
 }
@@ -30,7 +35,10 @@ function phaseClass(phase: LobbyRoom['phase']): string {
     : 'bg-amber-500/15 text-amber-200 border-amber-500/30';
 }
 
-export default function OnlineRoomList() {
+export default function OnlineRoomList({
+  joinError = '',
+  onJoinErrorDismiss,
+}: OnlineRoomListProps) {
   const navigate = useNavigate();
   const [result, setResult] = useState<ListRoomsResult>({ status: 'ok', rooms: [] });
   const [loading, setLoading] = useState(false);
@@ -38,6 +46,7 @@ export default function OnlineRoomList() {
   const [passwordInput, setPasswordInput] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [verifying, setVerifying] = useState(false);
+  const [joinErrorMessage, setJoinErrorMessage] = useState('');
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -45,6 +54,12 @@ export default function OnlineRoomList() {
     setResult(next);
     setLoading(false);
   }, []);
+
+  useEffect(() => {
+    if (!joinError) return;
+    setJoinErrorMessage(joinError);
+    void refresh();
+  }, [joinError, refresh]);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +74,11 @@ export default function OnlineRoomList() {
       clearInterval(timer);
     };
   }, []);
+
+  const dismissJoinError = () => {
+    setJoinErrorMessage('');
+    onJoinErrorDismiss?.();
+  };
 
   const joinRoom = (room: LobbyRoom) => {
     if (room.phase !== 'lobby') return;
@@ -111,10 +131,10 @@ export default function OnlineRoomList() {
           type="button"
           onClick={() => void refresh()}
           disabled={loading}
-          className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-sm text-zinc-300 transition hover:bg-white/5 disabled:opacity-50"
+          aria-label="새로고침"
+          className="inline-flex items-center justify-center rounded-full border border-white/10 p-2 text-zinc-300 transition hover:bg-white/5 disabled:opacity-50"
         >
           <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-          새로고침
         </button>
       </div>
 
@@ -242,6 +262,31 @@ export default function OnlineRoomList() {
               className="w-full rounded-full bg-violet-600 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
             >
               {verifying ? '확인 중…' : '입장'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {joinErrorMessage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          role="dialog"
+          aria-modal
+          aria-labelledby="join-error-title"
+        >
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#12101c] p-5 shadow-xl">
+            <h3 id="join-error-title" className="mb-4 text-lg font-semibold text-zinc-100">
+              입장 실패
+            </h3>
+            <p className="mb-5 text-sm leading-relaxed text-zinc-300">
+              {joinErrorMessage}
+            </p>
+            <button
+              type="button"
+              onClick={dismissJoinError}
+              className="w-full rounded-full bg-violet-600 py-2.5 text-sm font-semibold text-white transition hover:bg-violet-500"
+            >
+              확인
             </button>
           </div>
         </div>

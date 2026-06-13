@@ -6,7 +6,7 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "dev:vercel": "vercel dev",
+    "dev:vercel": "npx vercel dev --local-config vercel-dev.json",
     "convert:models": "node scripts/convert-fbx-to-glb.mjs",
     "optimize:models": "node scripts/optimize-glb.mjs",
     "build:models": "npm run convert:models && npm run optimize:models"

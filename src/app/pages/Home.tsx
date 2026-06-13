@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { Gamepad2 } from 'lucide-react';
 import GameHomeCard from '../components/home/GameHomeCard';
 import OnlineRoomList from '../components/home/OnlineRoomList';
@@ -25,8 +26,16 @@ const pageShellClass =
   'mx-auto w-full max-w-6xl px-5 sm:px-8 lg:max-w-7xl lg:px-10 xl:max-w-[85rem] xl:px-12 2xl:max-w-[96rem] 2xl:px-16';
 
 export default function Home() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const joinError =
+    (location.state as { joinError?: string } | null)?.joinError ?? '';
+
   const [mode, setMode] = useState<PlayMode>(
-    () => loadSessionPlayMode() ?? 'offline',
+    () =>
+      (location.state as { playMode?: PlayMode } | null)?.playMode ??
+      loadSessionPlayMode() ??
+      'offline',
   );
   const visibleGames = getGamesForMode(mode);
 
@@ -34,6 +43,18 @@ export default function Home() {
     setMode(next);
     saveSessionPlayMode(next);
   };
+
+  const clearJoinError = useCallback(() => {
+    navigate('.', { replace: true, state: { playMode: 'online' } });
+  }, [navigate]);
+
+  useEffect(() => {
+    const state = location.state as { playMode?: PlayMode } | null;
+    if (state?.playMode === 'online') {
+      setMode('online');
+      saveSessionPlayMode('online');
+    }
+  }, [location.state]);
 
   useEffect(() => {
     const onPointerDown = () => {
@@ -87,7 +108,12 @@ export default function Home() {
           ))}
         </div>
 
-        {mode === 'online' && <OnlineRoomList />}
+        {mode === 'online' && (
+          <OnlineRoomList
+            joinError={joinError}
+            onJoinErrorDismiss={clearJoinError}
+          />
+        )}
       </main>
     </div>
   );

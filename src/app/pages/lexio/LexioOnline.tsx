@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   Home,
   Copy,
@@ -75,6 +75,7 @@ import {
   ROOM_PASSWORD_MAX,
 } from '../../utils/lobbyApi';
 import { setLexioBgmMode, stopLexioBgm } from '../../utils/lexioBgm';
+import { saveSessionPlayMode } from '../../utils/playModeSession';
 import {
   playLexioSound,
   reactLexioGameViewSounds,
@@ -117,8 +118,10 @@ function playerLeftMessage(nickname: string, replacedByAi: boolean): string {
 }
 
 export default function LexioOnline() {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const roomFromUrl = searchParams.get('room')?.trim() ?? '';
+  const isAutoJoinFromUrl = Boolean(roomFromUrl);
 
   const [screen, setScreen] = useState<Screen>('entry');
   const [nickname, setNickname] = useState(loadStoredNickname);
@@ -172,6 +175,7 @@ export default function LexioOnline() {
   roomPasswordRef.current = roomPassword;
   const roomVisibilityRef = useRef(roomVisibility);
   roomVisibilityRef.current = roomVisibility;
+  const autoJoinActiveRef = useRef(false);
 
   const showTransientStatus = useCallback((message: string) => {
     if (statusClearTimerRef.current) {
@@ -437,6 +441,20 @@ export default function LexioOnline() {
     gameStateRef.current = null;
   }, [unpublishRoom]);
 
+  const returnToHomeWithJoinError = useCallback(
+    (message: string) => {
+      cleanup();
+      setConnectionStatus('idle');
+      setStatusMessage('');
+      saveSessionPlayMode('online');
+      navigate('/', {
+        replace: true,
+        state: { playMode: 'online', joinError: message },
+      });
+    },
+    [cleanup, navigate],
+  );
+
   useEffect(
     () => () => {
       if (statusClearTimerRef.current) {
@@ -558,6 +576,11 @@ export default function LexioOnline() {
     setStatusMessage('');
     const id = parseRoomCodeInput(codeInput);
     if (!id) {
+      if (autoJoinActiveRef.current) {
+        autoJoinActiveRef.current = false;
+        returnToHomeWithJoinError(invalidRoomCodeMessage());
+        return;
+      }
       setConnectionStatus('error');
       setStatusMessage(invalidRoomCodeMessage());
       return;
@@ -579,18 +602,30 @@ export default function LexioOnline() {
         type: 'hello',
         nickname: nickname.trim() || '게스트',
       });
+      autoJoinActiveRef.current = false;
       setScreen('lobby');
       setConnectionStatus('connected');
     } catch (err) {
+      const msg = peerErrorMessage(err);
+      if (autoJoinActiveRef.current) {
+        autoJoinActiveRef.current = false;
+        returnToHomeWithJoinError(msg);
+        return;
+      }
       setConnectionStatus('error');
-      setStatusMessage(peerErrorMessage(err));
+      setStatusMessage(msg);
     }
-  }, [cleanup, nickname, onGuestMessage]);
+  }, [cleanup, nickname, onGuestMessage, returnToHomeWithJoinError]);
 
   const attemptJoin = useCallback(
     async (codeInput: string) => {
       const id = parseRoomCodeInput(codeInput);
       if (!id) {
+        if (autoJoinActiveRef.current) {
+          autoJoinActiveRef.current = false;
+          returnToHomeWithJoinError(invalidRoomCodeMessage());
+          return;
+        }
         setStatusMessage(invalidRoomCodeMessage());
         return;
       }
@@ -604,7 +639,7 @@ export default function LexioOnline() {
       }
       void joinRoom(displayRoomCode(id));
     },
-    [joinRoom],
+    [joinRoom, returnToHomeWithJoinError],
   );
 
   // 초대/홈 목록(?room=)으로 들어오면 자동 참가 시도
@@ -614,11 +649,18 @@ export default function LexioOnline() {
     }
     const parsed = parseRoomCodeInput(roomFromUrl);
     if (!parsed) {
-      setStatusMessage(invalidRoomCodeMessage());
+      returnToHomeWithJoinError(invalidRoomCodeMessage());
       return;
     }
+    autoJoinActiveRef.current = true;
     void attemptJoin(displayRoomCode(parsed));
-  }, [roomFromUrl, screen, connectionStatus, attemptJoin]);
+  }, [
+    roomFromUrl,
+    screen,
+    connectionStatus,
+    attemptJoin,
+    returnToHomeWithJoinError,
+  ]);
 
   const submitJoinPassword = async () => {
     const id = parseRoomCodeInput(pendingJoinCode);
@@ -1002,7 +1044,17 @@ export default function LexioOnline() {
                 <h3 className="text-lg font-semibold text-purple-100">비공개 방</h3>
                 <button
                   type="button"
-                  onClick={() => setShowJoinPassword(false)}
+                  onClick={() => {
+                    setShowJoinPassword(false);
+                    if (autoJoinActiveRef.current) {
+                      autoJoinActiveRef.current = false;
+                      saveSessionPlayMode('online');
+                      navigate('/', {
+                        replace: true,
+                        state: { playMode: 'online' },
+                      });
+                    }
+                  }}
                   className="rounded-lg p-1 text-purple-300 hover:bg-white/5"
                   aria-label="닫기"
                 >
@@ -1041,13 +1093,13 @@ export default function LexioOnline() {
           </div>
         )}
 
-        {statusMessage && !isTableView && (
+        {statusMessage && !isTableView && !isAutoJoinFromUrl && (
           <p className="mb-4 text-center text-base text-rose-200/90 bg-rose-950/40 rounded-lg py-2.5 px-4 border border-rose-500/30">
             {statusMessage}
           </p>
         )}
 
-        {screen === 'entry' && connectionStatus !== 'connecting' && (
+        {screen === 'entry' && connectionStatus !== 'connecting' && !isAutoJoinFromUrl && (
           <>
           <p className="mb-6 text-center text-sm text-purple-300/70">
             방 목록은 홈 → 온라인 모드에서 확인할 수 있습니다.

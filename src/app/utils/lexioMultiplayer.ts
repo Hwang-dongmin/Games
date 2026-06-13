@@ -256,7 +256,7 @@ export function peerErrorMessage(err: unknown): string {
       return '방 코드가 이미 사용 중입니다. 새 방을 만들어주세요.';
     }
     if (m.includes('Could not connect to peer')) {
-      return '방을 찾을 수 없습니다. 호스트가 방을 연 상태인지 확인하고, 6자리 방 코드만 입력해주세요. (URL 전체를 붙여넣지 마세요)';
+      return '방을 찾을 수 없습니다. 호스트가 방을 연 상태인지 확인해주세요.';
     }
     return m;
   }
@@ -264,5 +264,5 @@ export function peerErrorMessage(err: unknown): string {
 }
 
 export function invalidRoomCodeMessage(): string {
-  return '올바른 6자리 방 코드를 입력해주세요. (예: ABC234) 초대 링크는 주소창에서 열거나, 링크의 ?room= 뒤 코드만 입력하세요.';
+  return '올바른 방 코드를 입력해주세요.';
 }

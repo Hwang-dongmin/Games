@@ -13,33 +13,38 @@ import {
 } from '../_lib/redis';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const redis = getRedis();
-  if (!redis) {
-    res.status(503).json({ error: 'lobby_disabled' });
-    return;
-  }
+  try {
+    const redis = getRedis();
+    if (!redis) {
+      res.status(503).json({ error: 'lobby_disabled' });
+      return;
+    }
 
-  const code = Array.isArray(req.query.code) ? req.query.code[0] : req.query.code;
-  if (!isValidRoomCode(code)) {
-    res.status(400).json({ error: 'invalid_room_code' });
-    return;
-  }
+    const code = Array.isArray(req.query.code) ? req.query.code[0] : req.query.code;
+    if (!isValidRoomCode(code)) {
+      res.status(400).json({ error: 'invalid_room_code' });
+      return;
+    }
 
-  if (req.method === 'GET') {
-    return getRoom(redis, code, res);
-  }
-  if (req.method === 'POST') {
-    return verifyPassword(redis, code, req, res);
-  }
-  if (req.method === 'PATCH') {
-    return heartbeat(redis, code, req, res);
-  }
-  if (req.method === 'DELETE') {
-    return closeRoom(redis, code, res);
-  }
+    if (req.method === 'GET') {
+      return await getRoom(redis, code, res);
+    }
+    if (req.method === 'POST') {
+      return await verifyPassword(redis, code, req, res);
+    }
+    if (req.method === 'PATCH') {
+      return await heartbeat(redis, code, req, res);
+    }
+    if (req.method === 'DELETE') {
+      return await closeRoom(redis, code, res);
+    }
 
-  res.setHeader('Allow', 'GET, POST, PATCH, DELETE');
-  res.status(405).json({ error: 'method_not_allowed' });
+    res.setHeader('Allow', 'GET, POST, PATCH, DELETE');
+    res.status(405).json({ error: 'method_not_allowed' });
+  } catch (err) {
+    console.error('[api/rooms/[code]]', err);
+    res.status(500).json({ error: 'internal_error' });
+  }
 }
 
 async function getRoom(

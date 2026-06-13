@@ -1,13 +1,61 @@
 import { createHash } from 'node:crypto';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Redis } from '@upstash/redis';
 
 let cached: Redis | null | undefined;
 
+function loadEnvFile(path: string): void {
+  try {
+    const text = readFileSync(path, 'utf8');
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq <= 0) continue;
+      const key = trimmed.slice(0, eq).trim();
+      if (process.env[key] !== undefined) continue;
+      let val = trimmed.slice(eq + 1).trim();
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
+        val = val.slice(1, -1);
+      }
+      process.env[key] = val;
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** vercel dev가 .env.local을 API에 안 넘기는 경우 대비 */
+function ensureRedisEnv(): void {
+  const hasUrl =
+    process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
+  const hasToken =
+    process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
+  if (hasUrl && hasToken) return;
+
+  const root = process.cwd();
+  for (const name of ['.env.local', '.env']) {
+    const path = resolve(root, name);
+    if (existsSync(path)) {
+      loadEnvFile(path);
+      return;
+    }
+  }
+}
+
 export function getRedis(): Redis | null {
   if (cached !== undefined) return cached;
 
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  ensureRedisEnv();
+
+  const url =
+    process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
+  const token =
+    process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
 
   cached = url && token ? new Redis({ url, token }) : null;
   return cached;

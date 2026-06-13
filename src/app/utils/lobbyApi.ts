@@ -58,6 +58,8 @@ export type ListRoomsResult =
 
 export const ROOM_PASSWORD_MAX = 4;
 
+const ROOM_ACCESS_PREFIX = 'room-access:';
+
 export function grantRoomAccess(code: string): void {
   try {
     sessionStorage.setItem(`${ROOM_ACCESS_PREFIX}${code}`, '1');

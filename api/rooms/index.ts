@@ -19,21 +19,26 @@ import {
 const MAX_LISTED_ROOMS = 100;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const redis = getRedis();
-  if (!redis) {
-    res.status(503).json({ error: 'lobby_disabled' });
-    return;
-  }
+  try {
+    const redis = getRedis();
+    if (!redis) {
+      res.status(503).json({ error: 'lobby_disabled' });
+      return;
+    }
 
-  if (req.method === 'GET') {
-    return listRooms(redis, res);
-  }
-  if (req.method === 'POST') {
-    return registerRoom(redis, req, res);
-  }
+    if (req.method === 'GET') {
+      return await listRooms(redis, res);
+    }
+    if (req.method === 'POST') {
+      return await registerRoom(redis, req, res);
+    }
 
-  res.setHeader('Allow', 'GET, POST');
-  res.status(405).json({ error: 'method_not_allowed' });
+    res.setHeader('Allow', 'GET, POST');
+    res.status(405).json({ error: 'method_not_allowed' });
+  } catch (err) {
+    console.error('[api/rooms]', err);
+    res.status(500).json({ error: 'internal_error' });
+  }
 }
 
 async function listRooms(
