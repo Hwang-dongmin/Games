@@ -76,3 +76,16 @@ export function getGamePath(game: GameDefinition, mode: PlayMode): string {
   }
   return game.offlinePath;
 }
+
+export function getGameById(id: string): GameDefinition | undefined {
+  return games.find((g) => g.id === id);
+}
+
+export function getOnlineJoinPath(gameId: string, roomCode: string): string | null {
+  const game = getGameById(gameId);
+  if (!game?.onlinePath) return null;
+  const code = roomCode.startsWith('lexio-')
+    ? roomCode.slice('lexio-'.length)
+    : roomCode;
+  return `${game.onlinePath}?join=1&room=${encodeURIComponent(code)}`;
+}

@@ -7,3 +7,5 @@ node_modules/
 !.cursor/rules/**
 !.cursor/skills/
 !.cursor/skills/**
+.vercel
+.env*

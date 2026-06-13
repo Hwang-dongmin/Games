@@ -2,10 +2,13 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import {
   clampInt,
   getRedis,
+  hashPassword,
   isValidRoomCode,
+  normalizePassword,
   ROOM_TTL_SECONDS,
   ROOMS_INDEX_KEY,
   roomKey,
+  toPublicRoom,
   type StoredRoom,
 } from '../_lib/redis';
 
@@ -22,6 +25,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  if (req.method === 'GET') {
+    return getRoom(redis, code, res);
+  }
+  if (req.method === 'POST') {
+    return verifyPassword(redis, code, req, res);
+  }
   if (req.method === 'PATCH') {
     return heartbeat(redis, code, req, res);
   }
@@ -29,8 +38,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return closeRoom(redis, code, res);
   }
 
-  res.setHeader('Allow', 'PATCH, DELETE');
+  res.setHeader('Allow', 'GET, POST, PATCH, DELETE');
   res.status(405).json({ error: 'method_not_allowed' });
+}
+
+async function getRoom(
+  redis: NonNullable<ReturnType<typeof getRedis>>,
+  code: string,
+  res: VercelResponse,
+) {
+  const room = (await redis.get<StoredRoom>(roomKey(code))) as StoredRoom | null;
+  if (!room) {
+    res.status(404).json({ error: 'room_not_found' });
+    return;
+  }
+  res.status(200).json({ room: toPublicRoom(room) });
+}
+
+async function verifyPassword(
+  redis: NonNullable<ReturnType<typeof getRedis>>,
+  code: string,
+  req: VercelRequest,
+  res: VercelResponse,
+) {
+  const room = (await redis.get<StoredRoom>(roomKey(code))) as StoredRoom | null;
+  if (!room) {
+    res.status(404).json({ error: 'room_not_found' });
+    return;
+  }
+  if (room.visibility !== 'private' || !room.passwordHash) {
+    res.status(200).json({ ok: true });
+    return;
+  }
+
+  const password = normalizePassword(parseBody(req.body).password);
+  if (!password || hashPassword(password) !== room.passwordHash) {
+    res.status(403).json({ error: 'wrong_password' });
+    return;
+  }
+  res.status(200).json({ ok: true });
 }
 
 async function heartbeat(

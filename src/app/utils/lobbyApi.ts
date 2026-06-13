@@ -1,21 +1,25 @@
 /**
  * Vercel 서버리스 API 클라이언트.
- *
- * 서버는 "방 발견(공개 로비)"과 "전적/랭킹"만 담당하며, 실제 게임 진행은 기존
- * P2P(PeerJS) 그대로다. push 시 프론트와 함께 Vercel에 배포된다.
- * Redis 미설정(503)이거나 네트워크 오류 시 조용히 실패하여 P2P 흐름은 유지된다.
- *
- * 로컬 API 테스트: `npx vercel dev` (일반 `npm run dev`는 프론트만)
  */
 
-export type PublicRoom = {
+export type RoomPhase = 'lobby' | 'playing';
+export type RoomVisibility = 'public' | 'private';
+
+export type LobbyRoom = {
   code: string;
+  gameId: string;
   hostNickname: string;
   playerCount: number;
   maxPlayers: number;
   totalRounds: number;
+  phase: RoomPhase;
+  visibility: RoomVisibility;
+  hasPassword: boolean;
   createdAt: number;
 };
+
+/** @deprecated use LobbyRoom */
+export type PublicRoom = LobbyRoom;
 
 export type LeaderboardEntry = {
   name: string;
@@ -26,15 +30,18 @@ export type LeaderboardEntry = {
 
 export type RegisterRoomPayload = {
   code: string;
+  gameId: string;
   hostNickname: string;
   playerCount: number;
   maxPlayers: number;
   totalRounds: number;
+  visibility: RoomVisibility;
+  password?: string;
 };
 
 export type HeartbeatPayload = {
   playerCount: number;
-  phase: 'lobby' | 'playing';
+  phase: RoomPhase;
 };
 
 export type ResultPayload = {
@@ -43,6 +50,29 @@ export type ResultPayload = {
 };
 
 export type HeartbeatResult = 'ok' | 'expired' | 'error';
+
+export type ListRoomsResult =
+  | { status: 'ok'; rooms: LobbyRoom[] }
+  | { status: 'disabled' }
+  | { status: 'error' };
+
+export const ROOM_PASSWORD_MAX = 4;
+
+export function grantRoomAccess(code: string): void {
+  try {
+    sessionStorage.setItem(`${ROOM_ACCESS_PREFIX}${code}`, '1');
+  } catch {
+    /* ignore */
+  }
+}
+
+export function hasRoomAccess(code: string): boolean {
+  try {
+    return sessionStorage.getItem(`${ROOM_ACCESS_PREFIX}${code}`) === '1';
+  } catch {
+    return false;
+  }
+}
 
 async function postJson(url: string, body: unknown, keepalive = false) {
   return fetch(url, {
@@ -53,14 +83,45 @@ async function postJson(url: string, body: unknown, keepalive = false) {
   });
 }
 
-export async function listRooms(): Promise<PublicRoom[] | null> {
+export async function listRooms(): Promise<ListRoomsResult> {
   try {
     const res = await fetch('/api/rooms', { headers: { Accept: 'application/json' } });
+    if (res.status === 503) return { status: 'disabled' };
+    if (!res.ok) return { status: 'error' };
+    const data = (await res.json()) as { rooms?: LobbyRoom[] };
+    return {
+      status: 'ok',
+      rooms: Array.isArray(data.rooms) ? data.rooms : [],
+    };
+  } catch {
+    return { status: 'error' };
+  }
+}
+
+export async function fetchRoom(code: string): Promise<LobbyRoom | null> {
+  try {
+    const res = await fetch(`/api/rooms/${encodeURIComponent(code)}`, {
+      headers: { Accept: 'application/json' },
+    });
     if (!res.ok) return null;
-    const data = (await res.json()) as { rooms?: PublicRoom[] };
-    return Array.isArray(data.rooms) ? data.rooms : [];
+    const data = (await res.json()) as { room?: LobbyRoom };
+    return data.room ?? null;
   } catch {
     return null;
+  }
+}
+
+export async function verifyRoomPassword(
+  code: string,
+  password: string,
+): Promise<boolean> {
+  try {
+    const res = await postJson(`/api/rooms/${encodeURIComponent(code)}`, {
+      password,
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 
@@ -98,7 +159,7 @@ export async function closeRoom(code: string): Promise<void> {
       keepalive: true,
     });
   } catch {
-    /* 무시 — TTL로 자동 만료됨 */
+    /* 무시 */
   }
 }
 
@@ -112,7 +173,9 @@ export async function recordResult(payload: ResultPayload): Promise<void> {
 
 export async function fetchLeaderboard(): Promise<LeaderboardEntry[] | null> {
   try {
-    const res = await fetch('/api/leaderboard', { headers: { Accept: 'application/json' } });
+    const res = await fetch('/api/leaderboard', {
+      headers: { Accept: 'application/json' },
+    });
     if (!res.ok) return null;
     const data = (await res.json()) as { players?: LeaderboardEntry[] };
     return Array.isArray(data.players) ? data.players : [];

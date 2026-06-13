@@ -13,14 +13,13 @@ import {
   Users,
   Play,
   Loader2,
-  Link2,
   Crown,
   BookOpen,
   ChevronLeft,
   Globe,
   Lock,
-  RefreshCw,
   Trophy,
+  X,
 } from 'lucide-react';
 import LexioFirstPersonScene from './LexioFirstPersonScene';
 import LexioOnlineWelcomeOverlay from './LexioOnlineWelcomeOverlay';
@@ -63,12 +62,17 @@ import {
 import {
   closeRoom as apiCloseRoom,
   fetchLeaderboard,
+  fetchRoom,
+  grantRoomAccess,
+  hasRoomAccess,
   heartbeatRoom,
-  listRooms,
   recordResult,
   registerRoom,
+  verifyRoomPassword,
   type LeaderboardEntry,
-  type PublicRoom,
+  type RegisterRoomPayload,
+  type RoomVisibility,
+  ROOM_PASSWORD_MAX,
 } from '../../utils/lobbyApi';
 import { setLexioBgmMode, stopLexioBgm } from '../../utils/lexioBgm';
 import {
@@ -118,7 +122,6 @@ export default function LexioOnline() {
 
   const [screen, setScreen] = useState<Screen>('entry');
   const [nickname, setNickname] = useState(loadStoredNickname);
-  const [joinCode, setJoinCode] = useState(roomFromUrl);
   const [isHost, setIsHost] = useState(false);
   const [roomId, setRoomId] = useState('');
   const [connectionStatus, setConnectionStatus] = useState<
@@ -135,11 +138,13 @@ export default function LexioOnline() {
   const [welcomeLeaving, setWelcomeLeaving] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [copiedInvite, setCopiedInvite] = useState(false);
-  const [copiedCode, setCopiedCode] = useState(false);
   const [showRules, setShowRules] = useState(false);
-  const [isPublicRoom, setIsPublicRoom] = useState(true);
-  const [publicRooms, setPublicRooms] = useState<PublicRoom[] | null>(null);
-  const [loadingRooms, setLoadingRooms] = useState(false);
+  const [roomVisibility, setRoomVisibility] = useState<RoomVisibility>('public');
+  const [roomPassword, setRoomPassword] = useState('');
+  const [joinPassword, setJoinPassword] = useState('');
+  const [joinPasswordError, setJoinPasswordError] = useState('');
+  const [pendingJoinCode, setPendingJoinCode] = useState('');
+  const [showJoinPassword, setShowJoinPassword] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[] | null>(null);
 
   const hostRef = useRef<LexioHostRoom | null>(null);
@@ -162,6 +167,11 @@ export default function LexioOnline() {
   const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   /** 세션 결과를 한 번만 기록하도록 가드 */
   const recordedSessionRef = useRef(false);
+  const roomRegisterPayloadRef = useRef<RegisterRoomPayload | null>(null);
+  const roomPasswordRef = useRef(roomPassword);
+  roomPasswordRef.current = roomPassword;
+  const roomVisibilityRef = useRef(roomVisibility);
+  roomVisibilityRef.current = roomVisibility;
 
   const showTransientStatus = useCallback((message: string) => {
     if (statusClearTimerRef.current) {
@@ -360,6 +370,23 @@ export default function LexioOnline() {
     if (code) void apiCloseRoom(code);
   }, [stopHeartbeat]);
 
+  const buildRegisterPayload = useCallback(
+    (code: string, playerCount: number): RegisterRoomPayload => ({
+      code,
+      gameId: 'lexio',
+      hostNickname: nicknameRef.current.trim() || '호스트',
+      playerCount,
+      maxPlayers: lobbySettingsRef.current.maxPlayers,
+      totalRounds: lobbySettingsRef.current.totalRounds,
+      visibility: roomVisibilityRef.current,
+      password:
+        roomVisibilityRef.current === 'private'
+          ? roomPasswordRef.current
+          : undefined,
+    }),
+    [],
+  );
+
   /** 현재 로비/게임 상태를 서버에 반영. 만료됐으면 재등록. */
   const sendHeartbeat = useCallback(async () => {
     const code = publishedRoomRef.current;
@@ -370,37 +397,34 @@ export default function LexioOnline() {
       phase,
     });
     if (result === 'expired' && phase === 'lobby') {
+      const payload =
+        roomRegisterPayloadRef.current ??
+        buildRegisterPayload(code, lobbyPlayersRef.current.length);
       await registerRoom({
-        code,
-        hostNickname: nicknameRef.current.trim() || '호스트',
+        ...payload,
         playerCount: lobbyPlayersRef.current.length,
-        maxPlayers: lobbySettingsRef.current.maxPlayers,
-        totalRounds: lobbySettingsRef.current.totalRounds,
       });
     }
-  }, []);
+  }, [buildRegisterPayload]);
 
-  /** 공개 방으로 서버에 등록하고 heartbeat 시작 (호스트 전용). */
+  /** 서버에 방을 등록하고 heartbeat 시작 (호스트 전용). */
   const publishRoom = useCallback(
     async (code: string) => {
       stopHeartbeat();
       publishedRoomRef.current = code;
-      const ok = await registerRoom({
-        code,
-        hostNickname: nicknameRef.current.trim() || '호스트',
-        playerCount: lobbyPlayersRef.current.length || 1,
-        maxPlayers: lobbySettingsRef.current.maxPlayers,
-        totalRounds: lobbySettingsRef.current.totalRounds,
-      });
+      const payload = buildRegisterPayload(code, lobbyPlayersRef.current.length || 1);
+      roomRegisterPayloadRef.current = payload;
+      const ok = await registerRoom(payload);
       if (!ok) {
         publishedRoomRef.current = null;
+        roomRegisterPayloadRef.current = null;
         return;
       }
       heartbeatTimerRef.current = setInterval(() => {
         void sendHeartbeat();
       }, 20000);
     },
-    [sendHeartbeat, stopHeartbeat],
+    [buildRegisterPayload, sendHeartbeat, stopHeartbeat],
   );
 
   const cleanup = useCallback(() => {
@@ -485,6 +509,10 @@ export default function LexioOnline() {
   }, [isHost, screen, gameView, broadcastGame]);
 
   const createRoom = async () => {
+    if (roomVisibility === 'private' && !roomPassword.trim()) {
+      setStatusMessage('비공개 방은 비밀번호가 필요합니다.');
+      return;
+    }
     persistNickname(nickname);
     cleanup();
     setConnectionStatus('connecting');
@@ -515,22 +543,20 @@ export default function LexioOnline() {
       setConnectionStatus('connected');
       gameStateRef.current = createEmptyGameState(lobbySettings.totalRounds);
       recordedSessionRef.current = false;
-      if (isPublicRoom) {
-        lobbyPlayersRef.current = [hostPlayer];
-        void publishRoom(id);
-      }
+      lobbyPlayersRef.current = [hostPlayer];
+      void publishRoom(id);
     } catch (err) {
       setConnectionStatus('error');
       setStatusMessage(peerErrorMessage(err));
     }
   };
 
-  const joinRoom = async (codeInput?: string) => {
+  const joinRoom = useCallback(async (codeInput: string) => {
     persistNickname(nickname);
     cleanup();
     setConnectionStatus('connecting');
     setStatusMessage('');
-    const id = parseRoomCodeInput(codeInput ?? joinCode);
+    const id = parseRoomCodeInput(codeInput);
     if (!id) {
       setConnectionStatus('error');
       setStatusMessage(invalidRoomCodeMessage());
@@ -559,15 +585,57 @@ export default function LexioOnline() {
       setConnectionStatus('error');
       setStatusMessage(peerErrorMessage(err));
     }
-  };
+  }, [cleanup, nickname, onGuestMessage]);
 
+  const attemptJoin = useCallback(
+    async (codeInput: string) => {
+      const id = parseRoomCodeInput(codeInput);
+      if (!id) {
+        setStatusMessage(invalidRoomCodeMessage());
+        return;
+      }
+      const meta = await fetchRoom(id);
+      if (meta?.visibility === 'private' && !hasRoomAccess(id)) {
+        setPendingJoinCode(displayRoomCode(id));
+        setJoinPassword('');
+        setJoinPasswordError('');
+        setShowJoinPassword(true);
+        return;
+      }
+      void joinRoom(displayRoomCode(id));
+    },
+    [joinRoom],
+  );
+
+  // 초대/홈 목록(?room=)으로 들어오면 자동 참가 시도
   useEffect(() => {
     if (!roomFromUrl || screen !== 'entry' || connectionStatus !== 'idle') {
       return;
     }
     const parsed = parseRoomCodeInput(roomFromUrl);
-    setJoinCode(parsed ? displayRoomCode(parsed) : roomFromUrl);
-  }, [roomFromUrl, screen, connectionStatus]);
+    if (!parsed) {
+      setStatusMessage(invalidRoomCodeMessage());
+      return;
+    }
+    void attemptJoin(displayRoomCode(parsed));
+  }, [roomFromUrl, screen, connectionStatus, attemptJoin]);
+
+  const submitJoinPassword = async () => {
+    const id = parseRoomCodeInput(pendingJoinCode);
+    if (!id) return;
+    if (!joinPassword.trim()) {
+      setJoinPasswordError('비밀번호를 입력하세요');
+      return;
+    }
+    const ok = await verifyRoomPassword(id, joinPassword);
+    if (!ok) {
+      setJoinPasswordError('비밀번호가 틀렸습니다.');
+      return;
+    }
+    grantRoomAccess(id);
+    setShowJoinPassword(false);
+    void joinRoom(pendingJoinCode);
+  };
 
   // 호스트: 세션 종료 시 전적/랭킹 1회 기록 (AI 좌석 제외)
   useEffect(() => {
@@ -599,29 +667,15 @@ export default function LexioOnline() {
     });
   }, [isHost, gameView]);
 
-  const refreshRooms = useCallback(async () => {
-    setLoadingRooms(true);
-    const rooms = await listRooms();
-    setPublicRooms(rooms);
-    setLoadingRooms(false);
-  }, []);
-
-  // 진입 화면: 공개 방 목록 주기적 갱신 + 리더보드 1회 로드
+  // 진입 화면: 랭킹 1회 로드
   useEffect(() => {
     if (screen !== 'entry') return;
     let cancelled = false;
-    const load = async () => {
-      const rooms = await listRooms();
-      if (!cancelled) setPublicRooms(rooms);
-    };
-    void load();
-    const timer = setInterval(() => void load(), 8000);
     void fetchLeaderboard().then((lb) => {
       if (!cancelled) setLeaderboard(lb);
     });
     return () => {
       cancelled = true;
-      clearInterval(timer);
     };
   }, [screen]);
 
@@ -729,18 +783,6 @@ export default function LexioOnline() {
       setTimeout(() => setCopiedInvite(false), 2000);
     } catch {
       setStatusMessage('링크 복사에 실패했습니다.');
-    }
-  };
-
-  const copyRoomCode = async () => {
-    const code = displayRoomCode(roomId);
-    if (!code) return;
-    try {
-      await navigator.clipboard.writeText(code);
-      setCopiedCode(true);
-      setTimeout(() => setCopiedCode(false), 2000);
-    } catch {
-      setStatusMessage('방 코드 복사에 실패했습니다.');
     }
   };
 
@@ -924,8 +966,7 @@ export default function LexioOnline() {
             </h1>
             {isTableView && gameView && (
               <p className="mt-1 text-sm tracking-wide text-purple-200/80">
-                {displayRoomCode(roomId)} · 코인{' '}
-                {gameView.sessionCoinsBySeat[gameView.yourSeat] ?? 0} ·{' '}
+                코인 {gameView.sessionCoinsBySeat[gameView.yourSeat] ?? 0} ·{' '}
                 {gameView.sessionCompletedRounds}/{gameView.sessionTotalRounds}
                 판
               </p>
@@ -950,6 +991,49 @@ export default function LexioOnline() {
           maxSessionRounds={MAX_SESSION_ROUNDS}
         />
 
+        {showJoinPassword && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+            role="dialog"
+            aria-modal
+          >
+            <div className="w-full max-w-sm rounded-2xl border border-purple-500/30 bg-[#12101c] p-5">
+              <div className="mb-4 flex items-start justify-between">
+                <h3 className="text-lg font-semibold text-purple-100">비공개 방</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowJoinPassword(false)}
+                  className="rounded-lg p-1 text-purple-300 hover:bg-white/5"
+                  aria-label="닫기"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <input
+                type="password"
+                value={joinPassword}
+                onChange={(e) => setJoinPassword(e.target.value)}
+                maxLength={ROOM_PASSWORD_MAX}
+                placeholder="최대 4자"
+                className="mb-2 w-full rounded-lg border border-purple-500/40 bg-black/40 px-3 py-2.5 text-base"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void submitJoinPassword();
+                }}
+              />
+              {joinPasswordError && (
+                <p className="mb-3 text-sm text-rose-300">{joinPasswordError}</p>
+              )}
+              <button
+                type="button"
+                onClick={() => void submitJoinPassword()}
+                className="w-full rounded-full bg-purple-600 py-2.5 text-sm font-semibold text-white hover:bg-purple-500"
+              >
+                입장
+              </button>
+            </div>
+          </div>
+        )}
+
         {connectionStatus === 'connecting' && (
           <div className="flex items-center justify-center gap-2 py-8 text-base text-purple-200">
             <Loader2 className="w-6 h-6 animate-spin" />
@@ -965,213 +1049,104 @@ export default function LexioOnline() {
 
         {screen === 'entry' && connectionStatus !== 'connecting' && (
           <>
-          <div className="grid gap-6 md:grid-cols-2">
-            <section
-              className="rounded-2xl p-6 border border-purple-500/30"
-              style={{
-                background:
-                  'linear-gradient(180deg, rgba(30,27,75,0.8) 0%, rgba(10,10,35,0.9) 100%)',
-              }}
-            >
-              <h2 className="text-xl font-semibold text-purple-100 mb-4 flex items-center gap-2">
-                <Crown className="w-6 h-6 text-amber-400" />
-                방 만들기
-              </h2>
-              <label className="block text-sm text-purple-200/80 mb-1">
-                닉네임
-              </label>
-              <input
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                maxLength={16}
-                className="w-full mb-4 rounded-lg bg-black/30 border border-purple-500/40 px-3 py-2.5 text-base"
-                placeholder="닉네임"
-              />
-              <div className="mb-4 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsPublicRoom(true)}
-                  aria-pressed={isPublicRoom}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${
-                    isPublicRoom
-                      ? 'border-purple-400/70 bg-purple-500/20 text-purple-50'
-                      : 'border-purple-500/25 bg-black/20 text-purple-300/60 hover:text-purple-200'
-                  }`}
-                >
-                  <Globe className="h-4 w-4" />
-                  공개 방
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsPublicRoom(false)}
-                  aria-pressed={!isPublicRoom}
-                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${
-                    !isPublicRoom
-                      ? 'border-purple-400/70 bg-purple-500/20 text-purple-50'
-                      : 'border-purple-500/25 bg-black/20 text-purple-300/60 hover:text-purple-200'
-                  }`}
-                >
-                  <Lock className="h-4 w-4" />
-                  비공개
-                </button>
-              </div>
-              <p className="mb-4 -mt-2 text-sm leading-relaxed text-purple-300/60">
-                {isPublicRoom
-                  ? '공개 방은 로비 목록에 표시되어 누구나 참가할 수 있습니다.'
-                  : '비공개 방은 방 코드·초대 링크를 아는 사람만 참가합니다.'}
-              </p>
+          <p className="mb-6 text-center text-sm text-purple-300/70">
+            방 목록은 홈 → 온라인 모드에서 확인할 수 있습니다.
+          </p>
+
+          <section
+            className="rounded-2xl p-6 border border-purple-500/30"
+            style={{
+              background:
+                'linear-gradient(180deg, rgba(30,27,75,0.8) 0%, rgba(10,10,35,0.9) 100%)',
+            }}
+          >
+            <h2 className="text-xl font-semibold text-purple-100 mb-4 flex items-center gap-2">
+              <Crown className="w-6 h-6 text-amber-400" />
+              방 만들기
+            </h2>
+            <label className="block text-sm text-purple-200/80 mb-1">
+              닉네임
+            </label>
+            <input
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              maxLength={16}
+              className="w-full mb-4 rounded-lg bg-black/30 border border-purple-500/40 px-3 py-2.5 text-base"
+              placeholder="닉네임"
+            />
+            <div className="mb-4 flex gap-2">
               <button
                 type="button"
-                onClick={createRoom}
-                className="group relative w-full overflow-hidden rounded-full py-3.5 text-base font-bold tracking-[0.22em] uppercase text-purple-50 transition-all hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0"
-                style={{
-                  background:
-                    'linear-gradient(180deg, rgba(192,132,252,0.55) 0%, rgba(126,34,206,0.72) 45%, rgba(76,29,149,0.9) 100%)',
-                  boxShadow:
-                    'inset 0 0 0 1px rgba(216,180,254,0.65), 0 12px 32px -10px rgba(168,85,247,0.5)',
-                }}
+                onClick={() => setRoomVisibility('public')}
+                aria-pressed={roomVisibility === 'public'}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                  roomVisibility === 'public'
+                    ? 'border-purple-400/70 bg-purple-500/20 text-purple-50'
+                    : 'border-purple-500/25 bg-black/20 text-purple-300/60 hover:text-purple-200'
+                }`}
               >
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
-                  style={{
-                    background:
-                      'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(255,255,255,0.2) 0%, transparent 70%)',
-                  }}
-                />
-                <span className="relative z-10 inline-flex w-full items-center justify-center gap-2.5">
-                  <Crown className="h-5 w-5 shrink-0 text-amber-200/95" />
-                  새 방 만들기
-                </span>
+                <Globe className="h-4 w-4" />
+                공개
               </button>
-            </section>
-
-            <section
-              className="rounded-2xl p-6 border border-purple-500/30"
-              style={{
-                background:
-                  'linear-gradient(180deg, rgba(30,27,75,0.8) 0%, rgba(10,10,35,0.9) 100%)',
-              }}
-            >
-              <h2 className="text-xl font-semibold text-purple-100 mb-4 flex items-center gap-2">
-                <Link2 className="w-6 h-6 text-sky-400" />
-                방 참가
-              </h2>
-              <label className="block text-sm text-purple-200/80 mb-1">
-                방 코드
-              </label>
-              <input
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value)}
-                maxLength={200}
-                className="w-full mb-2 rounded-lg bg-black/30 border border-purple-500/40 px-3 py-2.5 text-base font-mono tracking-widest uppercase"
-                placeholder="예: ABC234"
-              />
-              <p className="mb-4 text-sm leading-relaxed text-purple-300/60">
-                초대 링크는 주소창에서 열고, 여기에는 방 코드만 입력하세요.
-              </p>
               <button
                 type="button"
-                onClick={() => joinRoom()}
-                disabled={!parseRoomCodeInput(joinCode)}
-                className="group relative w-full overflow-hidden rounded-full py-3.5 text-base font-bold tracking-[0.22em] uppercase text-slate-50 transition-all hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 disabled:hover:brightness-100"
-                style={{
-                  background:
-                    'linear-gradient(180deg, rgba(125,211,252,0.55) 0%, rgba(37,99,235,0.72) 42%, rgba(67,56,202,0.88) 100%)',
-                  boxShadow:
-                    'inset 0 0 0 1px rgba(186,230,253,0.65), 0 12px 32px -10px rgba(56,189,248,0.5)',
-                }}
+                onClick={() => setRoomVisibility('private')}
+                aria-pressed={roomVisibility === 'private'}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium transition ${
+                  roomVisibility === 'private'
+                    ? 'border-purple-400/70 bg-purple-500/20 text-purple-50'
+                    : 'border-purple-500/25 bg-black/20 text-purple-300/60 hover:text-purple-200'
+                }`}
               >
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-disabled:opacity-0"
-                  style={{
-                    background:
-                      'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(255,255,255,0.22) 0%, transparent 70%)',
-                  }}
-                />
-                <span className="relative z-10 inline-flex w-full items-center justify-center gap-2.5">
-                  <Users className="h-5 w-5 shrink-0 opacity-95" />
-                  참가하기
-                </span>
+                <Lock className="h-4 w-4" />
+                비공개
               </button>
-            </section>
-          </div>
-
-          {publicRooms !== null && (
-            <section
-              className="mt-6 rounded-2xl border border-purple-500/30 p-6"
+            </div>
+            {roomVisibility === 'private' && (
+              <>
+                <label className="block text-sm text-purple-200/80 mb-1">
+                  비밀번호
+                </label>
+                <input
+                  type="password"
+                  value={roomPassword}
+                  onChange={(e) => setRoomPassword(e.target.value)}
+                  maxLength={ROOM_PASSWORD_MAX}
+                  className="w-full mb-4 rounded-lg bg-black/30 border border-purple-500/40 px-3 py-2.5 text-base"
+                  placeholder="최대 4자"
+                />
+              </>
+            )}
+            <p className="mb-4 -mt-2 text-sm leading-relaxed text-purple-300/60">
+              {roomVisibility === 'public'
+                ? '공개 방은 홈 온라인 방 목록에 표시됩니다.'
+                : '비공개 방도 목록에 표시되며, 입장 시 비밀번호가 필요합니다.'}
+            </p>
+            <button
+              type="button"
+              onClick={createRoom}
+              className="group relative w-full overflow-hidden rounded-full py-3.5 text-base font-bold tracking-[0.22em] uppercase text-purple-50 transition-all hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0"
               style={{
                 background:
-                  'linear-gradient(180deg, rgba(30,27,75,0.8) 0%, rgba(10,10,35,0.9) 100%)',
+                  'linear-gradient(180deg, rgba(192,132,252,0.55) 0%, rgba(126,34,206,0.72) 45%, rgba(76,29,149,0.9) 100%)',
+                boxShadow:
+                  'inset 0 0 0 1px rgba(216,180,254,0.65), 0 12px 32px -10px rgba(168,85,247,0.5)',
               }}
             >
-              <div className="mb-4 flex items-center justify-between gap-2">
-                <h2 className="flex items-center gap-2 text-xl font-semibold text-purple-100">
-                  <Globe className="h-6 w-6 text-emerald-400" />
-                  공개 방
-                  <span className="text-base font-normal text-purple-300/60">
-                    {publicRooms.length}
-                  </span>
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => void refreshRooms()}
-                  disabled={loadingRooms}
-                  aria-label="목록 새로고침"
-                  className="inline-flex items-center gap-1.5 rounded-full border border-purple-500/40 px-3 py-1.5 text-sm text-purple-200 transition hover:bg-purple-500/15 disabled:opacity-50"
-                >
-                  <RefreshCw
-                    className={`h-4 w-4 ${loadingRooms ? 'animate-spin' : ''}`}
-                  />
-                  새로고침
-                </button>
-              </div>
-
-              {publicRooms.length === 0 ? (
-                <p className="py-6 text-center text-base text-purple-300/60">
-                  지금 열린 공개 방이 없습니다. 새 방을 만들어 보세요.
-                </p>
-              ) : (
-                <ul className="flex flex-col gap-2">
-                  {publicRooms.map((room) => {
-                    const full = room.playerCount >= room.maxPlayers;
-                    return (
-                      <li
-                        key={room.code}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-purple-500/25 bg-black/25 px-4 py-3"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-base font-medium text-purple-50">
-                            {room.hostNickname}님의 방
-                          </p>
-                          <p className="font-mono text-sm tracking-widest text-purple-300/70">
-                            {displayRoomCode(room.code)} · {room.totalRounds}판
-                          </p>
-                        </div>
-                        <div className="flex shrink-0 items-center gap-3">
-                          <span className="inline-flex items-center gap-1 text-sm text-purple-200/80">
-                            <Users className="h-4 w-4" />
-                            {room.playerCount}/{room.maxPlayers}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              joinRoom(displayRoomCode(room.code))
-                            }
-                            disabled={full || connectionStatus === 'connecting'}
-                            className="rounded-full bg-purple-600/80 px-4 py-1.5 text-sm font-semibold text-purple-50 transition hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-45"
-                          >
-                            {full ? '가득 참' : '참가'}
-                          </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
-          )}
+              <span
+                aria-hidden
+                className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                style={{
+                  background:
+                    'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(255,255,255,0.2) 0%, transparent 70%)',
+                }}
+              />
+              <span className="relative z-10 inline-flex w-full items-center justify-center gap-2.5">
+                <Crown className="h-5 w-5 shrink-0 text-amber-200/95" />
+                새 방 만들기
+              </span>
+            </button>
+          </section>
 
           {leaderboard !== null && leaderboard.length > 0 && (
             <section
@@ -1223,45 +1198,26 @@ export default function LexioOnline() {
             }}
           >
             {roomId && (
-              <div className="mb-6">
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm uppercase tracking-widest text-purple-300/70">
-                    방 코드
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <Users
-                      className={`w-5 h-5 ${
-                        connectionStatus === 'connected'
-                          ? 'text-purple-300'
-                          : 'text-rose-400/90'
-                      }`}
-                    />
-                    <span className="text-base text-purple-200/80">
-                      {lobbyPlayers.length}/{lobbySettings.maxPlayers}명
-                    </span>
-                  </div>
-                </div>
-                <div className="flex items-stretch overflow-hidden rounded-lg border border-purple-500/40 bg-black/30">
-                  <p className="min-w-0 flex-1 px-3 py-3 font-mono text-3xl font-bold tracking-[0.35em] text-purple-100 select-all sm:text-4xl">
-                    {displayRoomCode(roomId)}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={copyRoomCode}
-                    aria-label="방 코드 복사"
-                    className="group/copy-code flex shrink-0 items-center justify-center self-center px-3 text-purple-200"
-                  >
-                    {copiedCode ? (
-                      <Check className="h-5 w-5 text-emerald-400 transition-opacity group-hover/copy-code:opacity-70" />
-                    ) : (
-                      <Copy className="h-5 w-5 transition-opacity group-hover/copy-code:opacity-60" />
-                    )}
-                  </button>
+              <div className="mb-6 flex items-center justify-between gap-2">
+                <p className="text-sm uppercase tracking-widest text-purple-300/70">
+                  {isHost && roomVisibility === 'public' ? '공개 방' : '대기실'}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Users
+                    className={`w-5 h-5 ${
+                      connectionStatus === 'connected'
+                        ? 'text-purple-300'
+                        : 'text-rose-400/90'
+                    }`}
+                  />
+                  <span className="text-base text-purple-200/80">
+                    {lobbyPlayers.length}/{lobbySettings.maxPlayers}명
+                  </span>
                 </div>
               </div>
             )}
 
-            {inviteUrl && (
+            {inviteUrl && isHost && roomVisibility === 'private' && (
               <div className="mb-6">
                 <p className="mb-2 text-sm uppercase tracking-widest text-purple-300/70">
                   초대 링크

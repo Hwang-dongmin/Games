@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Gamepad2 } from 'lucide-react';
 import GameHomeCard from '../components/home/GameHomeCard';
+import OnlineRoomList from '../components/home/OnlineRoomList';
 import HomeSfxToggle from '../components/home/HomeSfxToggle';
 import PlayModeToggle from '../components/home/PlayModeToggle';
 import {
@@ -17,7 +18,7 @@ import { isLexioSfxMuted, unlockLexioAudio } from '../utils/lexioSounds';
 
 const gridClassByMode: Record<PlayMode, string> = {
   offline: 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-4',
-  online: 'grid-cols-1 sm:max-w-md lg:max-w-xl xl:max-w-2xl sm:mx-auto w-full',
+  online: 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
 };
 
 const pageShellClass =
@@ -85,6 +86,8 @@ export default function Home() {
             />
           ))}
         </div>
+
+        {mode === 'online' && <OnlineRoomList />}
       </main>
     </div>
   );
