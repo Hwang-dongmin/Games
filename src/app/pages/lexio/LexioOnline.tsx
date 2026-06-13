@@ -119,7 +119,7 @@ function playerLeftMessage(nickname: string, replacedByAi: boolean): string {
 
 export default function LexioOnline() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const roomFromUrl = searchParams.get('room')?.trim() ?? '';
   const isAutoJoinFromUrl = Boolean(roomFromUrl);
 
@@ -176,6 +176,9 @@ export default function LexioOnline() {
   const roomVisibilityRef = useRef(roomVisibility);
   roomVisibilityRef.current = roomVisibility;
   const autoJoinActiveRef = useRef(false);
+  /** 뒤로 나가기 등 의도적 퇴장 시 ?room= 자동 참가 재시도 방지 */
+  const suppressAutoJoinRef = useRef(false);
+  const removeLobbyPlayerRef = useRef<(peerId: string) => void>(() => {});
 
   const showTransientStatus = useCallback((message: string) => {
     if (statusClearTimerRef.current) {
@@ -189,6 +192,16 @@ export default function LexioOnline() {
   }, []);
 
   const inviteUrl = roomId ? buildInviteUrl(roomId) : '';
+
+  const returnToOnlineHome = useCallback(() => {
+    suppressAutoJoinRef.current = true;
+    autoJoinActiveRef.current = false;
+    saveSessionPlayMode('online');
+    navigate('/', {
+      replace: true,
+      state: { playMode: 'online' },
+    });
+  }, [navigate]);
 
   const broadcastGame = useCallback((state: LexioGameState) => {
     const host = hostRef.current;
@@ -229,6 +242,7 @@ export default function LexioOnline() {
             ...prev,
             { peerId: fromPeerId, nickname: msg.nickname, seat },
           ];
+          lobbyPlayersRef.current = next;
           hostRef.current?.broadcast({
             type: 'lobby_update',
             players: next,
@@ -244,6 +258,11 @@ export default function LexioOnline() {
           });
           return next;
         });
+        return;
+      }
+
+      if (msg.type === 'leave') {
+        removeLobbyPlayerRef.current(fromPeerId);
         return;
       }
 
@@ -303,9 +322,12 @@ export default function LexioOnline() {
         playLexioSound('invalid');
         break;
       case 'host_left':
-        setConnectionStatus('error');
-        setStatusMessage('호스트가 방을 나갔습니다.');
-        setScreen('entry');
+        guestRef.current?.destroy();
+        guestRef.current = null;
+        if (searchParams.get('room')) {
+          setSearchParams({}, { replace: true });
+        }
+        returnToOnlineHome();
         break;
       case 'player_left':
         showTransientStatus(
@@ -315,49 +337,11 @@ export default function LexioOnline() {
       default:
         break;
     }
-  }, [showTransientStatus]);
+  }, [returnToOnlineHome, searchParams, setSearchParams, showTransientStatus]);
 
-  const handleGuestDisconnected = useCallback(
-    (peerId: string) => {
-      const leaving = lobbyPlayersRef.current.find((p) => p.peerId === peerId);
-      const nextLobby = lobbyPlayersRef.current.filter(
-        (p) => p.peerId !== peerId,
-      );
-      const gs = gameStateRef.current;
-      const replacedByAi = Boolean(
-        leaving && gs && gs.phase === 'playing' && gs.players.some(
-          (p) => p.peerId === peerId,
-        ),
-      );
-
-      if (leaving) {
-        showTransientStatus(
-          playerLeftMessage(leaving.nickname, replacedByAi),
-        );
-        hostRef.current?.broadcast({
-          type: 'player_left',
-          nickname: leaving.nickname,
-          replacedByAi,
-        });
-      }
-
-      if (replacedByAi && gs) {
-        const replaced = replacePlayerWithAI(gs, peerId);
-        if (replaced) {
-          gameStateRef.current = replaced.state;
-          broadcastGame(replaced.state);
-        }
-      }
-
-      hostRef.current?.broadcast({
-        type: 'lobby_update',
-        players: nextLobby,
-        settings: lobbySettingsRef.current,
-      });
-      setLobbyPlayers(nextLobby);
-    },
-    [broadcastGame, showTransientStatus],
-  );
+  const handleGuestDisconnected = useCallback((peerId: string) => {
+    removeLobbyPlayerRef.current(peerId);
+  }, []);
 
   const stopHeartbeat = useCallback(() => {
     if (heartbeatTimerRef.current) {
@@ -410,6 +394,51 @@ export default function LexioOnline() {
       });
     }
   }, [buildRegisterPayload]);
+
+  const removeLobbyPlayer = useCallback(
+    (peerId: string) => {
+      const current = lobbyPlayersRef.current;
+      const leaving = current.find((p) => p.peerId === peerId);
+      if (!leaving) return;
+
+      const nextLobby = current.filter((p) => p.peerId !== peerId);
+      lobbyPlayersRef.current = nextLobby;
+
+      const gs = gameStateRef.current;
+      const replacedByAi = Boolean(
+        gs &&
+          gs.phase === 'playing' &&
+          gs.players.some((p) => p.peerId === peerId),
+      );
+
+      showTransientStatus(
+        playerLeftMessage(leaving.nickname, replacedByAi),
+      );
+      hostRef.current?.broadcast({
+        type: 'player_left',
+        nickname: leaving.nickname,
+        replacedByAi,
+      });
+
+      if (replacedByAi && gs) {
+        const replaced = replacePlayerWithAI(gs, peerId);
+        if (replaced) {
+          gameStateRef.current = replaced.state;
+          broadcastGame(replaced.state);
+        }
+      }
+
+      hostRef.current?.broadcast({
+        type: 'lobby_update',
+        players: nextLobby,
+        settings: lobbySettingsRef.current,
+      });
+      setLobbyPlayers(nextLobby);
+      void sendHeartbeat();
+    },
+    [broadcastGame, sendHeartbeat, showTransientStatus],
+  );
+  removeLobbyPlayerRef.current = removeLobbyPlayer;
 
   /** 서버에 방을 등록하고 heartbeat 시작 (호스트 전용). */
   const publishRoom = useCallback(
@@ -644,6 +673,10 @@ export default function LexioOnline() {
 
   // 초대/홈 목록(?room=)으로 들어오면 자동 참가 시도
   useEffect(() => {
+    if (suppressAutoJoinRef.current) {
+      suppressAutoJoinRef.current = false;
+      return;
+    }
     if (!roomFromUrl || screen !== 'entry' || connectionStatus !== 'idle') {
       return;
     }
@@ -829,7 +862,22 @@ export default function LexioOnline() {
   };
 
   const leaveRoom = () => {
+    const wasHost = isHost;
+    suppressAutoJoinRef.current = true;
+    autoJoinActiveRef.current = false;
+    if (wasHost) {
+      hostRef.current?.broadcast({ type: 'host_left' });
+    } else {
+      guestRef.current?.send({ type: 'leave' });
+    }
     cleanup();
+    if (searchParams.get('room')) {
+      setSearchParams({}, { replace: true });
+    }
+    if (!wasHost) {
+      returnToOnlineHome();
+      return;
+    }
     setScreen('entry');
     setConnectionStatus('idle');
     setLobbyPlayers([]);
@@ -1101,10 +1149,6 @@ export default function LexioOnline() {
 
         {screen === 'entry' && connectionStatus !== 'connecting' && !isAutoJoinFromUrl && (
           <>
-          <p className="mb-6 text-center text-sm text-purple-300/70">
-            방 목록은 홈 → 온라인 모드에서 확인할 수 있습니다.
-          </p>
-
           <section
             className="rounded-2xl p-6 border border-purple-500/30"
             style={{

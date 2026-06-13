@@ -29,6 +29,7 @@ export type WireMessage =
   | { type: 'start' }
   | { type: 'game'; view: ClientGameView }
   | { type: 'action'; action: 'play' | 'pass'; tileIds?: number[] }
+  | { type: 'leave' }
   | { type: 'error'; message: string }
   | { type: 'host_left' }
   | { type: 'player_left'; nickname: string; replacedByAi?: boolean };
