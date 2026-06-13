@@ -14,7 +14,7 @@ import {
   roomKey,
   toPublicRoom,
   type StoredRoom,
-} from '../_lib/redis';
+} from '../_lib/redis.js';
 
 const MAX_LISTED_ROOMS = 100;
 

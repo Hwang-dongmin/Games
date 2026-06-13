@@ -10,7 +10,7 @@ import {
   roomKey,
   toPublicRoom,
   type StoredRoom,
-} from '../_lib/redis';
+} from '../_lib/redis.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {

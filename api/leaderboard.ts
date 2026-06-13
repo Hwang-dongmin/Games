@@ -6,7 +6,7 @@ import {
   playerKey,
   RESULTS_FEED_KEY,
   toInt,
-} from './_lib/redis';
+} from './_lib/redis.js';
 
 const TOP_N = 20;
 const RESULTS_FEED_CAP = 100;
